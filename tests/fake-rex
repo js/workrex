@@ -5,16 +5,31 @@ const argv = process.argv.slice(2);
 const action = argv[argv.indexOf("do") + 1];
 const args = JSON.parse(argv[argv.indexOf("--args") + 1]);
 const path = process.env.WR_FAKE_STORE;
-if (!path) throw new Error("Fake Rex requires WR_FAKE_STORE");
+if (!path) {
+  throw new Error("Fake Rex requires WR_FAKE_STORE");
+}
+
 const state = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { tabs: [], serial: 0 };
 let tab = state.tabs.find((t) => t.session_id === args.session_id && (t.window_id === args.window_id || t.label === args.label));
 const fail = process.env.WR_FAKE_FAIL;
 const controlError = "Rex.app is not accepting actions. Turn on Remote Control in its Settings under Rex Server.";
-if (fail === "select-before" && action === "wr_open") { console.error(`Error: ${controlError}`); process.exit(1); }
-if (fail === action) { console.error("Injected Rex failure"); process.exit(1); }
+
+if (fail === "select-before" && action === "wr_open") {
+  console.error(`Error: ${controlError}`);
+  process.exit(1);
+}
+if (fail === action) {
+  console.error("Injected Rex failure");
+  process.exit(1);
+}
+
 let result;
 if (action === "wr_status") {
-  result = { window_id: tab?.window_id ?? false, session_exists: args.session_id !== "missing", own_tab: !!tab && args.caller_block === tab.block_id };
+  result = {
+    window_id: tab?.window_id ?? false,
+    session_exists: args.session_id !== "missing",
+    own_tab: !!tab && args.caller_block === tab.block_id,
+  };
 } else if (action === "wr_open") {
   if (!tab) {
     tab = { ...args, window_id: `window:${++state.serial}`, block_id: `block:${state.serial}` };
@@ -24,12 +39,22 @@ if (action === "wr_status") {
 } else if (action === "wr_close") {
   state.tabs = state.tabs.filter((t) => t !== tab);
   result = { closed: true };
-} else throw new Error(`Unknown fake Rex action: ${action}`);
+} else {
+  throw new Error(`Unknown fake Rex action: ${action}`);
+}
 writeFileSync(path, JSON.stringify(state));
-if (fail === "open-after" && action === "wr_open") { console.error("Injected timeout after tab creation"); process.exit(1); }
+
+if (fail === "open-after" && action === "wr_open") {
+  console.error("Injected timeout after tab creation");
+  process.exit(1);
+}
 if ((fail === "select-after" || fail === "select-missing") && action === "wr_open") {
-  if (fail === "select-missing") { state.tabs = []; writeFileSync(path, JSON.stringify(state)); }
+  if (fail === "select-missing") {
+    state.tabs = [];
+    writeFileSync(path, JSON.stringify(state));
+  }
   console.error(`Error: wr_open ran, but client action 1 of 1, session.select, failed: ${controlError}`);
   process.exit(1);
 }
+
 console.log(JSON.stringify(result));

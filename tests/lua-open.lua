@@ -9,9 +9,13 @@ local window_id = "window:test"
 
 rex = {
   layout = layout,
-  action = function(action) actions[action.name] = action.run end,
+  action = function(action)
+    actions[action.name] = action.run
+  end,
   call = function(method, args)
-    if method == "session.list" then return { sessions = { { session_id = "session:test" } } } end
+    if method == "session.list" then
+      return { sessions = { { session_id = "session:test" } } }
+    end
     if method == "session.view" then
       return { windows = options.existing and { { window_id = window_id, label = label } } or {} }
     end
@@ -19,15 +23,23 @@ rex = {
       opened = opened + 1
       return { window_id = window_id, block_ids = { "block:editor", "block:agent" } }
     end
-    if method == "session.focus_window" then focused = args.window_id; return {} end
+    if method == "session.focus_window" then
+      focused = args.window_id
+      return {}
+    end
     error("Unexpected API call: " .. method, 0)
   end,
   session = {
-    focus_block = function(args) focused = args.block_id; return {} end,
+    focus_block = function(args)
+      focused = args.block_id
+      return {}
+    end,
   },
   client = {
     queue = function(name, args)
-      if options.fail_selection then error("Rex.app is not accepting actions. Turn on Remote Control.", 0) end
+      if options.fail_selection then
+        error("Rex.app is not accepting actions. Turn on Remote Control.", 0)
+      end
       selected = { name = name, args = args }
     end,
   },

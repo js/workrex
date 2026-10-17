@@ -1,6 +1,8 @@
 local function call(method, args)
   local result, err = rex.call(method, args)
-  if err ~= nil then error(err, 0) end
+  if err ~= nil then
+    error(err, 0)
+  end
   return result
 end
 
@@ -8,14 +10,21 @@ local function window(args)
   local sessions = call("session.list", {}).sessions or {}
   local exists = false
   for _, session in ipairs(sessions) do
-    if session.session_id == args.session_id then exists = true end
+    if session.session_id == args.session_id then
+      exists = true
+    end
   end
-  if not exists then return nil, false end
+  if not exists then
+    return nil, false
+  end
+
   local view = call("session.view", { session_id = args.session_id })
   local found = nil
   for _, item in ipairs(view.windows or {}) do
     if item.window_id == args.window_id or item.label == args.label then
-      if found ~= nil then error("Ambiguous wr tab ownership", 0) end
+      if found ~= nil then
+        error("Ambiguous wr tab ownership", 0)
+      end
       found = item
     end
   end
@@ -28,7 +37,9 @@ local function status(args)
   if item and args.caller_block then
     for _, layer in ipairs(item.layers or {}) do
       for _, block in ipairs(layer.blocks or {}) do
-        if block.block_id == args.caller_block then own = true end
+        if block.block_id == args.caller_block then
+          own = true
+        end
       end
     end
   end
@@ -39,7 +50,9 @@ rex.action {
   name = "wr_status",
   title = "Inspect workrex tab",
   args = { session_id = "string", window_id = "string?", label = "string", caller_block = "string?" },
-  run = function(_, args) return status(args) end,
+  run = function(_, args)
+    return status(args)
+  end,
 }
 
 rex.action {
@@ -51,42 +64,71 @@ rex.action {
   },
   run = function(_, args)
     local item, session_exists = window(args)
-    if not session_exists then error("Rex session no longer exists. Run add from a live Rex session.", 0) end
+    if not session_exists then
+      error("Rex session no longer exists. Run add from a live Rex session.", 0)
+    end
+
     local warning = nil
     if not item then
-      if #args.panes < 1 or #args.panes > 2 then error("Expected one or two panes", 0) end
+      if #args.panes < 1 or #args.panes > 2 then
+        error("Expected one or two panes", 0)
+      end
+
       local blocks = {}
       local focused = 1
       for i, pane in ipairs(args.panes) do
-        if type(pane.command) ~= "table" or #pane.command == 0 then error("Pane command must be an argument array", 0) end
-        for _, arg in ipairs(pane.command) do
-          if type(arg) ~= "string" then error("Command arguments must be strings", 0) end
+        if type(pane.command) ~= "table" or #pane.command == 0 then
+          error("Pane command must be an argument array", 0)
         end
+        for _, arg in ipairs(pane.command) do
+          if type(arg) ~= "string" then
+            error("Command arguments must be strings", 0)
+          end
+        end
+
         blocks[i] = rex.layout.block {
           flavor = "com.superlogical.terminal.shell",
           options = { command = pane.command, cwd = args.cwd },
         }
-        if pane.focus then focused = i end
+        if pane.focus then
+          focused = i
+        end
       end
+
       local layout = blocks[1]
       if blocks[2] then
         local pane = args.panes[2]
-        if type(pane.percentage) ~= "number" or pane.percentage < 1 or pane.percentage > 99 then error("Invalid split percentage", 0) end
+        if type(pane.percentage) ~= "number" or pane.percentage < 1 or pane.percentage > 99 then
+          error("Invalid split percentage", 0)
+        end
+
         local ratio = 1 - pane.percentage / 100
-        if pane.split == "horizontal" then layout = rex.layout.horizontal(ratio, blocks[1], blocks[2])
-        elseif pane.split == "vertical" then layout = rex.layout.vertical(ratio, blocks[1], blocks[2])
-        else error("Invalid split direction", 0) end
+        if pane.split == "horizontal" then
+          layout = rex.layout.horizontal(ratio, blocks[1], blocks[2])
+        elseif pane.split == "vertical" then
+          layout = rex.layout.vertical(ratio, blocks[1], blocks[2])
+        else
+          error("Invalid split direction", 0)
+        end
       end
-      item = call("session.new_window", { session_id = args.session_id, window_label = args.label, layout = layout, focus = true })
+
+      item = call("session.new_window", {
+        session_id = args.session_id, window_label = args.label, layout = layout, focus = true,
+      })
       local _, err = rex.session.focus_block { session_id = args.session_id, block_id = item.block_ids[focused] }
-      if err ~= nil then warning = err end
+      if err ~= nil then
+        warning = err
+      end
     else
       call("session.focus_window", { session_id = args.session_id, window_id = item.window_id })
     end
+
     local selected, err = pcall(rex.client.queue, "session.select", {
       session_id = args.session_id, window_id = item.window_id,
     })
-    if not selected then warning = tostring(err) end
+    if not selected then
+      warning = tostring(err)
+    end
     return { window_id = item.window_id, warning = warning }
   end,
 }
@@ -97,7 +139,9 @@ rex.action {
   args = { session_id = "string", window_id = "string?", label = "string" },
   run = function(_, args)
     local item = window(args)
-    if item then call("session.close_window", { session_id = args.session_id, window_id = item.window_id }) end
+    if item then
+      call("session.close_window", { session_id = args.session_id, window_id = item.window_id })
+    end
     return { closed = true }
   end,
 }
