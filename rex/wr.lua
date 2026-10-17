@@ -47,12 +47,11 @@ rex.action {
   title = "Open workrex tab",
   args = {
     session_id = "string", window_id = "string?", label = "string", cwd = "string",
-    panes = "array", focus = "boolean?",
+    panes = "array",
   },
   run = function(_, args)
     local item, session_exists = window(args)
     if not session_exists then error("Rex session no longer exists. Run add from a live Rex session.", 0) end
-    local focus = args.focus ~= false
     local warning = nil
     if not item then
       if #args.panes < 1 or #args.panes > 2 then error("Expected one or two panes", 0) end
@@ -78,12 +77,10 @@ rex.action {
         elseif pane.split == "vertical" then layout = rex.layout.vertical(ratio, blocks[1], blocks[2])
         else error("Invalid split direction", 0) end
       end
-      item = call("session.new_window", { session_id = args.session_id, window_label = args.label, layout = layout, focus = focus })
-      if focus then
-        local _, err = rex.session.focus_block { session_id = args.session_id, block_id = item.block_ids[focused] }
-        if err ~= nil then warning = err end
-      end
-    elseif focus then
+      item = call("session.new_window", { session_id = args.session_id, window_label = args.label, layout = layout, focus = true })
+      local _, err = rex.session.focus_block { session_id = args.session_id, block_id = item.block_ids[focused] }
+      if err ~= nil then warning = err end
+    else
       call("session.focus_window", { session_id = args.session_id, window_id = item.window_id })
     end
     return { window_id = item.window_id, warning = warning }

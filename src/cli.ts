@@ -1,9 +1,11 @@
 import { parseArgs } from "node:util";
+import { resolve } from "node:path";
 import { Repo } from "./repo";
 import { add, list } from "./workrex";
 import { deferTabCleanup, merge, remove } from "./lifecycle";
 
 export async function run(args: string[]) {
+  if (process.env.WR_LUA) process.env.WR_LUA = resolve(process.env.WR_LUA);
   if (!args.length || args[0] === "--help" || args[0] === "-h") {
     console.log("Usage: wr add <name> [--branch <source>]\n       wr merge <name> [--into <target>] [--force]\n       wr rm <name> [--force]\n       wr ls");
     return;

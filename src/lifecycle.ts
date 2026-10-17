@@ -78,7 +78,10 @@ function finishRemoval(repo: Repo, entry: Entry): boolean {
   const branch = repo.branch(entry.branch);
   if (branch !== null && branch !== expected) throw new Error("Source branch changed after cleanup began. Registration retained; inspect it before retrying.");
   const tree = worktrees(repo.primary).find((wt) => wt.path === entry.path);
-  if (tree || present(entry.path)) {
+  if (tree && !present(entry.path)) {
+    if (tree.locked || (tree.branch !== null && tree.branch !== entry.branch)) throw new Error("Missing worktree registration changed after cleanup began");
+    git(repo.primary, ["worktree", "remove", "--force", "--", entry.path]);
+  } else if (tree || present(entry.path)) {
     repo.verify(entry);
     if (!branch) throw new Error("Source branch disappeared before worktree cleanup");
     git(repo.primary, ["worktree", "remove", ...(entry.force ? ["--force"] : []), "--", entry.path]);

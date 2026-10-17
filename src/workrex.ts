@@ -27,9 +27,9 @@ export function add(repo: Repo, name: string, source?: string) {
   const cfg = config(repo.primary);
   const existing = repo.entries.find((entry) => entry.branch === name);
   if (existing) {
-    if (source) throw new Error("--branch cannot be used with an existing wr worktree");
+    if (source !== undefined) throw new Error("--branch cannot be used with an existing wr worktree");
+    if (existing.phase !== "ready") throw new Error(`${name} has unfinished ${existing.phase} work. Inspect its registration before retrying. A failed file-copy step can be abandoned with wr rm and --force.`);
     repo.verify(existing);
-    if (existing.phase !== "ready") throw new Error(`${name} has unfinished ${existing.phase} work. Inspect it, then use wr rm ${name} --force to abandon it.`);
     const status = inspectTab(existing);
     if (!status.sessionExists) {
       existing.sessionId = currentSession();
@@ -45,9 +45,9 @@ export function add(repo: Repo, name: string, source?: string) {
   const path = worktreePath(repo.primary, name);
   if (present(path) || repo.entries.some((entry) => entry.path === path)) throw new Error(`Worktree path already exists: ${path}`);
   const branchExists = repo.branch(name) !== null;
-  if (branchExists && source) throw new Error("--branch cannot reset an existing branch");
+  if (branchExists && source !== undefined) throw new Error("--branch cannot reset an existing branch");
   let start = "HEAD";
-  if (source) {
+  if (source !== undefined) {
     if (!repo.branch(source)) throw new Error(`Source branch does not exist: ${source}`);
     start = `refs/heads/${source}`;
   }
@@ -56,16 +56,20 @@ export function add(repo: Repo, name: string, source?: string) {
   const entry: Entry = {
     branch: name, path, gitDir: null, identity: null,
     sessionId: currentSession(), windowId: null,
-    label: `wr:${crypto.randomUUID()} ${basename(repo.primary)}/${name}`,
+    label: `${basename(repo.primary)}/${name} [wr:${crypto.randomUUID()}]`,
     phase: "creating", expectedHead: null, force: false,
   };
-  // Save the tab label before creation so a timed-out Rex request can be recovered.
   repo.entries.push(entry);
   repo.save();
   try {
     git(repo.primary, branchExists ? ["worktree", "add", "--", path, name] : ["worktree", "add", "-b", name, "--", path, startHead]);
   } catch (error) {
-    if (!worktrees(repo.primary).some((wt) => wt.path === path)) {
+    const trees = worktrees(repo.primary);
+    if (!trees.some((wt) => wt.path === path)) {
+      if (!branchExists && repo.branch(name) !== null) {
+        if (trees.some((wt) => wt.branch === name)) throw new Error(`Creation failed but ${name} is now checked out elsewhere. Inspect its registration before retrying.`);
+        git(repo.primary, ["update-ref", "-d", `refs/heads/${name}`, startHead]);
+      }
       repo.entries = repo.entries.filter((item) => item !== entry);
       repo.save();
     }

@@ -126,10 +126,21 @@ test("the executable works through an installation symlink", () => {
   expect(f.tabs()).toHaveLength(1);
 });
 
+test("failed worktree creation rolls back only a newly created unchanged branch", () => {
+  const name = "é".repeat(48);
+  expect(f.wr(["add", name, "--branch", "main"]).code).toBe(1);
+  expect(f.command(["git", "show-ref", "--verify", `refs/heads/${name}`]).code).not.toBe(0);
+  expect(f.state().entries).toEqual([]);
+  f.git(["branch", name]);
+  expect(f.wr(["add", name]).code).toBe(1);
+  expect(f.git(["rev-parse", `refs/heads/${name}`])).toBe(f.git(["rev-parse", "main"]));
+});
+
 test("branch names and command flags cannot become shell arguments", () => {
   for (const name of ["-b", "HEAD", "../escape", "bad name"]) expect(f.wr(["add", "--", name]).code).toBe(1);
   add("semi;colon");
   expect(f.git(["branch", "--show-current"], f.path("semi;colon"))).toBe("semi;colon");
   expect(f.wr(["add"]).code).toBe(1);
+  expect(f.wr(["add", "empty-source", "--branch", ""]).code).toBe(1);
   expect(f.wr(["ls", "--all"]).code).toBe(1);
 });

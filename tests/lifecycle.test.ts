@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixture } from "./helpers";
 
@@ -177,6 +177,38 @@ test("tab closure failure retains a retryable registration after Git cleanup", (
   ok(["rm", "feature"]);
   expect(f.state().entries).toEqual([]);
   expect(f.tabs()).toEqual([]);
+});
+
+test("cleanup resumes after the directory was removed but Git metadata remains", () => {
+  const path = add();
+  const state = f.state();
+  state.entries[0].phase = "removing";
+  state.entries[0].expectedHead = f.git(["rev-parse", "feature"]);
+  writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
+  rmSync(path, { recursive: true });
+  ok(["rm", "feature"]);
+  expect(f.state().entries).toEqual([]);
+  expect(f.git(["worktree", "list", "--porcelain"])).not.toContain(path);
+  expect(f.tabs()).toEqual([]);
+});
+
+test("cleanup refuses a branch that changed after removal began", () => {
+  const path = add();
+  const state = f.state();
+  state.entries[0].phase = "removing";
+  state.entries[0].expectedHead = f.git(["rev-parse", "feature"]);
+  writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
+  commit(path);
+  expect(f.wr(["rm", "feature", "--force"]).err).toContain("branch changed");
+  expect(existsSync(path)).toBe(true);
+  expect(f.tabs()).toHaveLength(1);
+});
+
+test("mutations refuse an existing repo lock", () => {
+  add();
+  mkdirSync(join(f.primary, ".git/workrex/lock"));
+  expect(f.wr(["rm", "feature", "--force"]).err).toContain("Another wr mutation");
+  expect(existsSync(f.path("feature"))).toBe(true);
 });
 
 test("merge and rm always require explicit names, even inside their worktree", () => {
