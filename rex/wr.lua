@@ -83,6 +83,10 @@ rex.action {
     else
       call("session.focus_window", { session_id = args.session_id, window_id = item.window_id })
     end
+    local selected, err = pcall(rex.client.queue, "session.select", {
+      session_id = args.session_id, window_id = item.window_id,
+    })
+    if not selected then warning = tostring(err) end
     return { window_id = item.window_id, warning = warning }
   end,
 }

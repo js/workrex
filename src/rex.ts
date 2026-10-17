@@ -4,10 +4,17 @@ import type { Entry } from "./repo";
 
 const luaScript = process.env.WR_LUA ? resolve(process.env.WR_LUA) : null;
 
+class TabSelectionError extends Error {}
+
 function call(action: string, args: Record<string, unknown>): Record<string, unknown> {
   const command = luaScript ? [luaScript, "--action", action] : [action];
   const result = Bun.spawnSync(["rex", "--timeout", "30s", "do", ...command, "--args", JSON.stringify(args), "--json"], { stdout: "pipe", stderr: "pipe" });
-  if (result.exitCode !== 0) throw new Error(`Rex: ${result.stderr.toString().trim() || "action failed"}`);
+  if (result.exitCode !== 0) {
+    const message = result.stderr.toString().trim() || "action failed";
+    const selection = action === "wr_open" && /^Error: wr_open ran, but client action \d+ of \d+, session\.select, failed:\s*([\s\S]+)$/.exec(message);
+    if (selection) throw new TabSelectionError(selection[1]);
+    throw new Error(`Rex: ${message}`);
+  }
   return object(JSON.parse(result.stdout.toString()), `Rex ${action} response`);
 }
 
@@ -21,10 +28,26 @@ export function inspectTab(entry: Entry): { windowId: string | null; sessionExis
   return { windowId: result.window_id === false ? null : text(result.window_id, "window_id"), sessionExists: result.session_exists, ownTab: result.own_tab };
 }
 
+function warnSelection(message: string) {
+  console.error("The worktree tab is open, but automatic switching failed.");
+  console.error(message.includes("Rex.app is not accepting actions") && message.includes("Remote Control")
+    ? "Turn on Remote Control in Rex Settings under Rex Server."
+    : message);
+}
+
 export function openTab(entry: Entry, panes: Pane[]): string {
-  const result = call("wr_open", { ...target(entry), cwd: entry.path, panes });
-  if (result.warning) console.error(`wr: tab opened, but focus failed: ${result.warning}`);
-  return text(result.window_id, "window_id");
+  try {
+    const result = call("wr_open", { ...target(entry), cwd: entry.path, panes });
+    const windowId = text(result.window_id, "window_id");
+    if (result.warning) warnSelection(text(result.warning, "warning"));
+    return windowId;
+  } catch (error) {
+    if (!(error instanceof TabSelectionError)) throw error;
+    const status = inspectTab(entry);
+    if (!status.windowId) throw error;
+    warnSelection(error.message);
+    return status.windowId;
+  }
 }
 
 export function closeTab(entry: Entry) {

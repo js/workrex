@@ -27,7 +27,7 @@ rex config reload
 wr --help
 ```
 
-Run `add` from a Rex terminal. It uses that terminal's `REX_SESSION`. Other commands find the associated tabs through the repo's registry. Rex must be reachable for commands that inspect or change tabs.
+Run `add` from a Rex terminal. It uses that terminal's `REX_SESSION`. Other commands find the associated tabs through the repo's registry. Rex must be reachable for commands that inspect or change tabs. Enable Remote Control under Rex Server in Rex's Settings for automatic tab switching.
 
 The default layout runs `nvim .` and `pi` side by side. The right pane gets 40 percent and focus. Install those programs or change the pane commands.
 

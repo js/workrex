@@ -108,6 +108,25 @@ test("closed or timed-out tabs are recovered without duplicate worktrees or file
   expect(f.tabs()).toHaveLength(2);
 });
 
+test.each(["select-after", "warn-selection"])("a tab selection failure is a friendly warning: %s", (failure) => {
+  const result = f.wr(["add", "selection"], f.primary, { WR_FAKE_FAIL: failure });
+  expect(result.code).toBe(0);
+  expect(result.err).toBe("The worktree tab is open, but automatic switching failed.\nTurn on Remote Control in Rex Settings under Rex Server.\n");
+  expect(result.out).toContain("selection\t");
+  expect(f.state().entries[0].windowId).toBe(f.tabs()[0].window_id);
+  const repeated = f.wr(["add", "selection"], f.primary, { WR_FAKE_FAIL: failure });
+  expect(repeated.code).toBe(0);
+  expect(repeated.err).toBe(result.err);
+  expect(f.tabs()).toHaveLength(1);
+});
+
+test.each(["select-before", "select-missing"])("selection errors do not claim an unconfirmed tab is open: %s", (failure) => {
+  const result = f.wr(["add", "unconfirmed"], f.primary, { WR_FAKE_FAIL: failure });
+  expect(result.code).toBe(1);
+  expect(result.err).not.toContain("The worktree tab is open");
+  expect(f.state().entries[0].windowId).toBeNull();
+});
+
 test("ls is repository scoped and retains missing worktrees", () => {
   add("mine");
   const other = fixture();

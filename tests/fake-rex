@@ -9,6 +9,8 @@ if (!path) throw new Error("Fake Rex requires WR_FAKE_STORE");
 const state = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { tabs: [], serial: 0 };
 let tab = state.tabs.find((t) => t.session_id === args.session_id && (t.window_id === args.window_id || t.label === args.label));
 const fail = process.env.WR_FAKE_FAIL;
+const controlError = "Rex.app is not accepting actions. Turn on Remote Control in its Settings under Rex Server.";
+if (fail === "select-before" && action === "wr_open") { console.error(`Error: ${controlError}`); process.exit(1); }
 if (fail === action) { console.error("Injected Rex failure"); process.exit(1); }
 let result;
 if (action === "wr_status") {
@@ -18,11 +20,16 @@ if (action === "wr_status") {
     tab = { ...args, window_id: `window:${++state.serial}`, block_id: `block:${state.serial}` };
     state.tabs.push(tab);
   }
-  result = { window_id: tab.window_id };
+  result = { window_id: tab.window_id, ...(fail === "warn-selection" ? { warning: controlError } : {}) };
 } else if (action === "wr_close") {
   state.tabs = state.tabs.filter((t) => t !== tab);
   result = { closed: true };
 } else throw new Error(`Unknown fake Rex action: ${action}`);
 writeFileSync(path, JSON.stringify(state));
 if (fail === "open-after" && action === "wr_open") { console.error("Injected timeout after tab creation"); process.exit(1); }
+if ((fail === "select-after" || fail === "select-missing") && action === "wr_open") {
+  if (fail === "select-missing") { state.tabs = []; writeFileSync(path, JSON.stringify(state)); }
+  console.error(`Error: wr_open ran, but client action 1 of 1, session.select, failed: ${controlError}`);
+  process.exit(1);
+}
 console.log(JSON.stringify(result));
