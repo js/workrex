@@ -1,0 +1,15 @@
+{
+  "panes": [
+    { "command": ["nvim", "."] },
+    {
+      "command": ["pi"],
+      "split": "horizontal",
+      "percentage": 40,
+      "focus": true
+    }
+  ],
+  "files": {
+    "copy": [],
+    "symlink": [".claude/settings.local.json"]
+  }
+}
