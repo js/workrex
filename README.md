@@ -1,6 +1,8 @@
 # workrex
 
-`wr` manages local Git worktrees and their Rex tabs. It runs with Bun, Git, and Rex. There are no runtime package dependencies, and it does not use workmux or tmux.
+`wr` manages local Git worktrees and their Rex tabs. It runs with Bun, Git, and Rex. There are no runtime package dependencies.
+
+[workmux](https://github.com/raine/workmux) for tmux is the prior art and inspiration for workrex. Credit to workmux's authors and contributors.
 
 ## Install
 
