@@ -1,0 +1,28 @@
+#!/usr/bin/env bun
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
+const argv = process.argv.slice(2);
+const action = argv[argv.indexOf("do") + 1];
+const args = JSON.parse(argv[argv.indexOf("--args") + 1]);
+const path = process.env.WR_FAKE_STORE;
+if (!path) throw new Error("Fake Rex requires WR_FAKE_STORE");
+const state = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { tabs: [], serial: 0 };
+let tab = state.tabs.find((t) => t.session_id === args.session_id && (t.window_id === args.window_id || t.label === args.label));
+const fail = process.env.WR_FAKE_FAIL;
+if (fail === action) { console.error("Injected Rex failure"); process.exit(1); }
+let result;
+if (action === "wr_status") {
+  result = { window_id: tab?.window_id ?? false, session_exists: args.session_id !== "missing", own_tab: !!tab && args.caller_block === tab.block_id };
+} else if (action === "wr_open") {
+  if (!tab) {
+    tab = { ...args, window_id: `window:${++state.serial}`, block_id: `block:${state.serial}` };
+    state.tabs.push(tab);
+  }
+  result = { window_id: tab.window_id };
+} else if (action === "wr_close") {
+  state.tabs = state.tabs.filter((t) => t !== tab);
+  result = { closed: true };
+} else throw new Error(`Unknown fake Rex action: ${action}`);
+writeFileSync(path, JSON.stringify(state));
+if (fail === "open-after" && action === "wr_open") { console.error("Injected timeout after tab creation"); process.exit(1); }
+console.log(JSON.stringify(result));

@@ -1,0 +1,7 @@
+{
+  "name": "workrex",
+  "private": true,
+  "type": "module",
+  "bin": { "wr": "./wr" },
+  "scripts": { "test": "bun test" }
+}
