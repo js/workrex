@@ -6,26 +6,30 @@
 
 ## Install
 
-From this checkout, link the executable and Lua module:
+From this checkout, link the executable:
 
 ```sh
-mkdir -p "$HOME/.local/bin" "$HOME/.config/rex"
+mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/wr" "$HOME/.local/bin/wr"
-ln -s "$PWD/rex/wr.lua" "$HOME/.config/rex/wr.lua"
 ```
 
-Add `~/.local/bin` to your `PATH`. Add this line to `~/.config/rex/init.lua`:
-
-```lua
-require("wr")
-```
-
-Reload the server configuration:
+Add `~/.local/bin` to your `PATH`. Then load the Lua module from the checkout. From the checkout, print the block with its path filled in:
 
 ```sh
+printf 'package.path = "%s/rex/?.lua;" .. package.path\nrequire("wr")\n' "$PWD"
+```
+
+Add the output to your Rex config file. `rex config check` prints that file on its `path:` line. Rex reads `REX_CONFIG` when it is set, otherwise `$XDG_CONFIG_HOME/rex/init.lua` or `~/.config/rex/init.lua`. Keep any existing `package.path` setup and add the block after it. If an earlier install linked `~/.config/rex/wr.lua`, remove that link, or it keeps loading the module even when the block's path is wrong.
+
+Check and reload the server configuration:
+
+```sh
+rex config check
 rex config reload
 wr --help
 ```
+
+If the path in the block is wrong, `rex config check` fails with `module wr not found`.
 
 Run `add` from a Rex terminal. It uses that terminal's `REX_SESSION`. Other commands find the associated tabs through the repo's registry. Rex must be reachable for commands that inspect or change tabs. Enable Remote Control under Rex Server in Rex's Settings for automatic tab switching.
 
