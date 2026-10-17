@@ -2,10 +2,11 @@ import { resolve } from "node:path";
 import { object, text, type Pane } from "./config";
 import type { Entry } from "./repo";
 
+const luaScript = process.env.WR_LUA ? resolve(process.env.WR_LUA) : null;
+
 function call(action: string, args: Record<string, unknown>): Record<string, unknown> {
-  const command = process.env.WR_LUA ? [resolve(process.env.WR_LUA), "--action", action] : [action];
+  const command = luaScript ? [luaScript, "--action", action] : [action];
   const result = Bun.spawnSync(["rex", "--timeout", "30s", "do", ...command, "--args", JSON.stringify(args), "--json"], { stdout: "pipe", stderr: "pipe" });
-  if (result.error) throw result.error;
   if (result.exitCode !== 0) throw new Error(`Rex: ${result.stderr.toString().trim() || "action failed"}`);
   return object(JSON.parse(result.stdout.toString()), `Rex ${action} response`);
 }

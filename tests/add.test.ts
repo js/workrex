@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fixture } from "./helpers";
+import { executable, fixture } from "./helpers";
 
 let f: ReturnType<typeof fixture>;
 beforeEach(() => { f = fixture(); });
@@ -103,7 +103,7 @@ test("closed or timed-out tabs are recovered without duplicate worktrees or file
   expect(f.tabs()).toHaveLength(1);
   const failure = f.wr(["add", "timeout"], f.primary, { WR_FAKE_FAIL: "open-after" });
   expect(failure.code).toBe(1);
-  expect(f.state().entries.find((e) => e.branch === "timeout").windowId).toBeNull();
+  expect(f.state().entries.find((e: { branch: string }) => e.branch === "timeout").windowId).toBeNull();
   add("timeout");
   expect(f.tabs()).toHaveLength(2);
 });
@@ -115,6 +115,15 @@ test("ls is repository scoped and retains missing worktrees", () => {
   rmSync(f.path("mine"), { recursive: true });
   expect(f.wr(["ls"]).out).toContain("mine\topen\tmissing");
   expect(f.wr(["add", "mine"]).err).toContain("missing");
+});
+
+test("the executable works through an installation symlink", () => {
+  const link = join(f.root, "wr");
+  symlinkSync(executable, link);
+  const result = f.command([link, "add", "installed"]);
+  expect(result.err).toBe("");
+  expect(result.code).toBe(0);
+  expect(f.tabs()).toHaveLength(1);
 });
 
 test("branch names and command flags cannot become shell arguments", () => {

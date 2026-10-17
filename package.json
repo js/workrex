@@ -2,6 +2,16 @@
   "name": "workrex",
   "private": true,
   "type": "module",
-  "bin": { "wr": "./wr" },
-  "scripts": { "test": "bun test" }
+  "bin": {
+    "wr": "./wr"
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:rex": "WR_REAL_REX=1 bun test tests/rex.test.ts",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "typescript": "^7.0.2"
+  }
 }

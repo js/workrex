@@ -7,7 +7,6 @@ export function git(cwd: string, args: string[], check = true): { code: number; 
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_MERGE_AUTOEDIT: "no" },
     stdout: "pipe", stderr: "pipe",
   });
-  if (result.error) throw result.error;
   const answer = { code: result.exitCode, out: result.stdout.toString(), err: result.stderr.toString() };
   if (check && answer.code !== 0) throw new Error(answer.err.trim() || `git ${args[0]} failed`);
   return answer;
