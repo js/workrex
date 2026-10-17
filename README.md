@@ -1,10 +1,12 @@
 # workrex
 
-`wr` manages local Git worktrees and their Rex tabs. It runs with Bun, Git, and Rex. There are no runtime package dependencies.
+`wr` creates Git worktrees and opens each in a Rex tab. Run `wr add new-feature` to start your editor and coding agent side by side. Configure other pane commands, copy `.env`, or symlink `node_modules` from your primary checkout.
 
-[workmux](https://github.com/raine/workmux) for tmux is the prior art and inspiration for workrex. Credit to workmux's authors and contributors.
+[workmux](https://github.com/raine/workmux) for tmux inspired this tool. Thanks to workmux's authors and contributors.
 
 ## Install
+
+`wr` requires Bun, Git, and Rex but has no runtime package dependencies. Install `nvim` and `pi` for the default panes, or [configure your own commands](#panes).
 
 From this checkout, link the executable:
 
@@ -13,15 +15,15 @@ mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/wr" "$HOME/.local/bin/wr"
 ```
 
-Add `~/.local/bin` to your `PATH`. Then load the Lua module from the checkout. From the checkout, print the block with its path filled in:
+Add `~/.local/bin` to your `PATH`. Generate the Lua config with this checkout's path:
 
 ```sh
 printf 'package.path = "%s/rex/?.lua;" .. package.path\nrequire("wr")\n' "$PWD"
 ```
 
-Add the output to your Rex config file. `rex config check` prints that file on its `path:` line. Rex reads `REX_CONFIG` when it is set, otherwise `$XDG_CONFIG_HOME/rex/init.lua` or `~/.config/rex/init.lua`. Keep any existing `package.path` setup and add the block after it. If an earlier install linked `~/.config/rex/wr.lua`, remove that link, or it keeps loading the module even when the block's path is wrong.
+Add the output to your Rex config after any existing `package.path` setup. `rex config check` prints the config file on its `path:` line. Rex uses `REX_CONFIG` if set, otherwise `$XDG_CONFIG_HOME/rex/init.lua` or `~/.config/rex/init.lua`.
 
-Check and reload the server configuration:
+Remove any old `~/.config/rex/wr.lua` symlink so Rex does not load that copy instead. Check and reload:
 
 ```sh
 rex config check
@@ -29,34 +31,7 @@ rex config reload
 wr --help
 ```
 
-If the path in the block is wrong, `rex config check` fails with `module wr not found`.
-
-Run `add` from a Rex terminal. It uses that terminal's `REX_SESSION`. Other commands find the associated tabs through the repo's registry. Rex must be reachable for commands that inspect or change tabs. Enable Remote Control under Rex Server in Rex's Settings for automatic tab switching.
-
-The default layout runs `nvim .` and `pi` side by side. The right pane gets 40 percent and focus. Install those programs or change the pane commands.
-
-## Configure
-
-Global settings live in `~/.config/workrex/config.json`. Repo settings live in `.workrex.json` in the primary checkout, even when you run `wr` from another worktree. Repo settings override global settings. Each configured array replaces its global counterpart. Commit or ignore `.workrex.json` so it does not make the merge target dirty.
-
-[examples/config.json](examples/config.json) reproduces the editor/agent layout and `.claude/settings.local.json` symlink rule. Add only file rules whose sources exist in the primary checkout.
-
-A repo configuration can copy `.env` and replace the global symlink list:
-
-```json
-{
-  "files": {
-    "copy": [".env"],
-    "symlink": []
-  }
-}
-```
-
-Files are copied once. Symlinks keep pointing into the primary checkout. Existing destinations, overlapping rules, missing sources, and paths outside the checkout cause an error. Copies do not support symlinks inside the source; use a symlink rule instead. Ignore local file-rule destinations in Git if they should not make the worktree dirty.
-
-Pane commands are argument arrays, not shell strings. Use `["sh", "-c", "your shell command"]` when shell syntax is necessary. Configure one or two panes. The second pane accepts `split` as `horizontal` or `vertical`, and `percentage` from 1 to 99. At most one pane can have `focus: true`.
-
-An optional `main_branch` names the local default branch. Otherwise, `wr` checks the locally recorded `origin/HEAD`, then local `main`, then local `master`. It never fetches or pulls.
+Run `add` inside a Rex terminal so it can use `REX_SESSION`. Other commands find tabs through the repo's registry. Rex must be reachable for tab operations. For automatic tab switching, enable Remote Control under Rex Server in Rex's Settings.
 
 ## Create and list worktrees
 
@@ -66,17 +41,106 @@ wr add fix-settings --branch develop
 wr ls
 ```
 
-Without `--branch`, a new branch starts at the invoking checkout's HEAD. An existing branch can get a worktree, but `--branch` never resets an existing branch.
+New branches start at the invoking checkout's HEAD unless you pass `--branch`. Existing branches keep their commits. `--branch` cannot reset them.
 
-Worktrees live beside the primary checkout in `<repo>__worktrees/`. Branch names are encoded as directory names, so `feature/login` uses `feature%2Flogin`.
+Worktrees live beside the primary checkout in `<repo>__worktrees/`. Branch names become directory names, with `feature/login` encoded as `feature%2Flogin`.
 
-Repeat `add` to focus the existing tab or reopen a closed tab. Files are not copied again. `wr` refuses to adopt worktrees it did not create.
+Repeat `add` to focus an open tab or reopen a closed one. It does not reapply file rules or recreate missing worktrees. `wr` refuses to adopt worktrees it did not create.
 
-`ls`, also spelled `list`, shows this repo's registered worktrees. Closed tabs and missing worktrees remain visible. A missing worktree is not silently recreated.
+`ls`, also spelled `list`, shows this repo's registered worktrees, including closed tabs and missing directories.
+
+## Configure
+
+### Global and per-project settings
+
+Both config files are optional JSON objects with the same options:
+
+| Scope | Location |
+| --- | --- |
+| Global, for all repos | `~/.config/workrex/config.json` |
+| Project, for one repo and its worktrees | `.workrex.json` in the primary checkout |
+
+If `XDG_CONFIG_HOME` is nonempty, the global path is `$XDG_CONFIG_HOME/workrex/config.json`. `wr` always reads project settings from the primary checkout, not the worktree where you run it.
+
+Project settings override global settings. Unset fields use the global value, or the built-in default if neither file sets it. Each array replaces the inherited list. `panes` replaces the whole layout, while `files.copy` and `files.symlink` replace their lists independently. Use `[]` to clear a file list.
+
+This project `.workrex.json` keeps the inherited panes, copies `.env`, clears global symlink rules, and uses `develop` as the default branch:
+
+```json
+{
+  "main_branch": "develop",
+  "files": {
+    "copy": [".env"],
+    "symlink": []
+  }
+}
+```
+
+Omit `files.symlink` to keep the global symlink rules instead. Commit `.workrex.json` to share settings, or ignore it to keep them local and avoid untracked changes. `wr` rejects unknown options.
+
+### Options and defaults
+
+| Option | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `panes` | Array of one or two pane objects | See below | Commands and layout for new tabs |
+| `files.copy` | Array of relative paths | `[]` | Copy files or directories from the primary checkout |
+| `files.symlink` | Array of relative paths | `[]` | Link files or directories to the primary checkout |
+| `main_branch` | Nonempty string | Auto-detected | Default merge target and branch used by `rm` to check for unmerged commits |
+
+The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the space and focus on `pi`:
+
+```json
+{
+  "panes": [
+    { "command": ["nvim", "."] },
+    {
+      "command": ["pi"],
+      "split": "horizontal",
+      "percentage": 40,
+      "focus": true
+    }
+  ],
+  "files": {
+    "copy": [],
+    "symlink": []
+  }
+}
+```
+
+[examples/config.json](examples/config.json) adds a `.claude/settings.local.json` symlink rule. Use it only where that source file exists.
+
+### Panes
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `command` | Nonempty array of nonempty strings | Required | Executable and arguments, run in the worktree directory |
+| `focus` | Boolean | `false` | Focus this pane when creating the tab |
+| `split` | `"horizontal"` or `"vertical"` | `"horizontal"` | Side by side or stacked top to bottom |
+| `percentage` | Integer from 1 to 99 | `40` | Second pane's share of the split |
+
+Only the second pane accepts `split` and `percentage`. At most one pane can set `focus: true`. If none does, the first pane gets focus.
+
+Use argument arrays such as `["npm", "run", "dev"]`, not `["npm run dev"]`. For shell syntax or variable expansion, use `["sh", "-c", "your shell command"]`.
+
+Pane changes apply to new or reopened tabs. Repeating `add` for an open tab does not change its layout or restart commands.
+
+### File rules
+
+Paths name files or directories relative to the primary checkout, not glob patterns. Each destination uses the same relative path in the new worktree.
+
+Copies happen once at worktree creation and remain independent. Symlinks share the source, so changes through a linked `node_modules` affect the primary checkout too.
+
+`wr` rejects missing sources, existing destinations, and overlapping rules. Sources must resolve inside the primary checkout. Paths cannot be absolute or contain `.`, `..`, or `.git` components. Copy sources cannot contain symlinks or Git metadata. Use a symlink rule for directories containing symlinks.
+
+Ignore rule destinations in Git, especially `.env`, to avoid accidental commits and untracked changes.
+
+### Default branch
+
+`main_branch` must name an existing local branch. If omitted, `wr` tries the local branch named by the recorded `origin/HEAD`, then `main`, then `master`. It errors if none exists and never fetches or pulls. `wr merge --into` overrides the default for that merge.
 
 ## Merge or remove work
 
-Both commands require an explicit branch name, including when run from that worktree:
+Both commands require a branch name, even when run from that worktree:
 
 ```sh
 wr merge fix-login
@@ -84,9 +148,9 @@ wr merge fix-settings --into develop
 wr rm abandoned-work
 ```
 
-`merge` rebases onto the target and fast-forwards it. A dirty target checkout blocks the operation. The starting branch passed to `add --branch` does not change the default merge target. When the target has no checkout, `wr` updates its ref without switching the primary checkout's branch.
+`merge` rebases the source branch onto the target, fast-forwards the target, then removes the source worktree, branch, and tab. A dirty target checkout blocks the merge. If the target has no checkout, `wr` updates its ref without switching branches in the primary checkout. The starting branch passed to `add --branch` does not change the merge target.
 
-A successful merge removes the source worktree, branch, and tab. `rm` does the same without merging, but normally refuses dirty work or commits not merged into the default branch.
+`rm` removes the worktree, branch, and tab without merging. It refuses dirty work or commits not merged into the default branch unless you pass `--force`.
 
 **Force deletes work without another prompt.**
 
@@ -95,39 +159,36 @@ wr merge fix-login --force
 wr rm abandoned-work --force
 ```
 
-- `merge --force` discards staged and unstaged tracked changes and removes non-ignored untracked files before rebasing. It does not commit or stash them. Ignored files survive until successful cleanup removes the entire worktree. Nested repositories and dirty submodules are not forcibly cleaned.
+- `merge --force` discards staged and unstaged tracked changes and removes non-ignored untracked files before rebasing. It does not commit or stash them. Ignored files survive until successful cleanup removes the worktree. It does not forcibly clean nested repositories or dirty submodules.
 - `rm --force` abandons the whole worktree, including ignored files and an unfinished rebase or merge.
-- `merge --force` never bypasses dirty-target checks or an unfinished Git operation.
+- `merge --force` still refuses dirty targets and unfinished Git operations.
 
-When a command removes its own tab, it finishes Git cleanup first. A detached process closes the tab and removes the registration after the caller releases the repo lock.
+Commands finish Git cleanup before closing their own tab in the background.
 
-## Recover from an interrupted command
+## Recovery
 
-A rebase conflict leaves the worktree and tab open. Resolve conflicts there, stage the resolution, and run `git rebase --continue`. Alternatively, run `git rebase --abort`. Then retry `wr merge` with the explicit branch name. `wr` refuses to start another merge while a Git operation is unfinished.
+A rebase conflict leaves the worktree and tab open. Resolve and stage the changes in that worktree. Run `git rebase --continue`, or abort with `git rebase --abort`. Retry `wr merge <branch>` afterward. Finish or abort any Git operation before retrying a merge.
 
-If Rex fails after `add` creates a worktree, repeat `add`. A failed file-copy step remains marked `creating`; inspect it and use explicit `rm --force` to abandon it before trying again.
+If Rex fails after worktree creation, retry `add`. If file setup fails, the entry stays `creating`. Inspect it, then use `wr rm <branch> --force` to abandon it before starting again.
 
-If tab closure fails after Git cleanup, the entry remains marked `removing`. Retry `rm` with the same name. Background closure errors go to `cleanup.log` beside the registry.
+If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <branch>`. Background errors go to `cleanup.log` beside the registry.
 
-The registry lives in the shared Git directory at `workrex/state.json`. A `workrex/lock` directory serializes repo mutations. If a killed process leaves the lock behind, read `lock/owner.json` and verify that the recorded process has stopped before manually removing that lock directory. Do not remove a live process's lock.
+The shared Git directory contains `workrex/state.json` and `workrex/lock`. The lock prevents concurrent `wr` changes. If a killed process leaves it behind, read `workrex/lock/owner.json` and confirm the process has stopped before removing the lock directory. Never remove a live process's lock.
 
 ## Develop
-
-Development checks use TypeScript and Bun type declarations:
 
 ```sh
 bun install --frozen-lockfile
 bun run check
 bun test
-bun run test:rex
 ```
 
-The default tests exercise the executable against temporary Git repositories and a fake Rex executable. `test:rex` creates and destroys only its own Rex sessions. It checks the real layout, tab reopening, and merge/removal from inside the tab being closed. It does not modify `init.lua`.
+Default tests use temporary Git repositories and a fake Rex executable. `bun run test:rex` checks the live layout, tab reopening, and cleanup from inside a tab. It creates and destroys its own Rex sessions and leaves `init.lua` unchanged.
 
-To try the Lua file without installing or reloading it, set `WR_LUA` to its absolute path:
+To test the Lua module without installing or reloading it:
 
 ```sh
 WR_LUA="$PWD/rex/wr.lua" ./wr add experiment
 ```
 
-Validated with Bun 1.4.2, Git 2.54.0, and Rex server `0.0.1792158932-g88fd41`. This version supports local, non-bare repositories and Rex tabs only.
+`wr` supports local, non-bare repositories and Rex tabs only. It was tested with Bun 1.4.2, Git 2.54.0, and Rex server `0.0.1792158932-g88fd41`.
