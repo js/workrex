@@ -19,11 +19,43 @@ test("add creates a worktree and configured tab; repeating add reuses both", () 
   expect(f.git(["branch", "--show-current"], path)).toBe("feature/login");
   expect(f.tabs()).toHaveLength(1);
   expect(f.tabs()[0].cwd).toBe(path);
+  expect(f.tabs()[0].label).toBe("project space/feature/login");
+  expect(f.state().entries[0].label).toBeUndefined();
   expect(f.tabs()[0].panes[1]).toEqual({ command: ["pi"], focus: true, split: "horizontal", percentage: 40 });
 
   add("feature/login");
   expect(f.tabs()).toHaveLength(1);
   expect(f.state().entries[0].phase).toBe("ready");
+});
+
+test("renamed tabs are still reused by their saved window ID", () => {
+  add("renamed");
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs[0].label = "My custom title";
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+
+  add("renamed");
+  expect(f.tabs()).toEqual(store.tabs);
+  expect(f.wr(["ls"]).out).toContain("renamed\topen\tready");
+});
+
+test("legacy registry labels are ignored and reopened tabs get plain titles", () => {
+  add("legacy");
+  const state = f.state();
+  const windowId = state.entries[0].windowId;
+  state.entries[0].label = "project space/legacy [wr:old-id]";
+  writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
+
+  add("legacy");
+  expect(f.state().entries[0].windowId).toBe(windowId);
+  expect(f.state().entries[0].label).toBeUndefined();
+
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs = [];
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+  add("legacy");
+  expect(f.tabs()[0].label).toBe("project space/legacy");
+  expect(f.state().entries[0].windowId).not.toBe(windowId);
 });
 
 test("add starts from current HEAD or an explicit --branch", () => {
@@ -130,7 +162,7 @@ test("file rules refuse traversal, symlink escapes, and overlap", () => {
   expect(f.wr(["add", "escape"]).err).toContain("Overlapping");
 });
 
-test("closed or timed-out tabs are recovered without duplicate worktrees or file copies", () => {
+test("closed tabs are reopened", () => {
   add("reopen");
   const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
   store.tabs = [];
@@ -139,16 +171,25 @@ test("closed or timed-out tabs are recovered without duplicate worktrees or file
 
   add("reopen");
   expect(f.tabs()).toHaveLength(1);
-
-  const failure = f.wr(["add", "timeout"], f.primary, { WR_FAKE_FAIL: "open-after" });
-  expect(failure.code).toBe(1);
-  expect(f.state().entries.find((e: { branch: string }) => e.branch === "timeout").windowId).toBeNull();
-
-  add("timeout");
-  expect(f.tabs()).toHaveLength(2);
 });
 
-test.each(["select-after", "warn-selection"])("a tab selection failure is a friendly warning: %s", (failure) => {
+test.each(["open-after", "select-after"])("unconfirmed creation reports manual cleanup instead of recovering by title: %s", (failure) => {
+  const result = f.wr(["add", "unconfirmed"], f.primary, { WR_FAKE_FAIL: failure });
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("close that tab manually before retrying wr add");
+  expect(f.state().entries[0].windowId).toBeNull();
+  const orphan = f.tabs()[0];
+  expect(f.wr(["ls"]).out).toContain("unconfirmed\tclosed\tready");
+
+  add("unconfirmed");
+  expect(f.tabs()).toHaveLength(2);
+  expect(f.tabs()[0]).toEqual(orphan);
+  expect(f.state().entries).toHaveLength(1);
+  expect(f.state().entries[0].windowId).not.toBe(orphan.window_id);
+});
+
+test("a selection warning with a confirmed window ID is nonfatal", () => {
+  const failure = "warn-selection";
   const result = f.wr(["add", "selection"], f.primary, { WR_FAKE_FAIL: failure });
   expect(result.code).toBe(0);
   expect(result.err).toBe(

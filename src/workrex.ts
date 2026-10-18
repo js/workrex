@@ -39,6 +39,7 @@ function installFiles(primary: string, destination: string, rules: FileRule[]) {
 export function add(repo: Repo, name: string, source?: string) {
   validateBranch(repo.primary, name);
   const cfg = config(repo.primary);
+  const label = `${basename(repo.primary)}/${name}`;
 
   const existing = repo.entries.find((entry) => entry.branch === name);
   if (existing) {
@@ -59,7 +60,7 @@ export function add(repo: Repo, name: string, source?: string) {
       existing.windowId = null;
       repo.save();
     }
-    existing.windowId = openTab(existing, cfg.panes);
+    existing.windowId = openTab(existing, cfg.panes, label);
     repo.save();
     console.log(`${name}\t${existing.path}\topen`);
     return;
@@ -94,7 +95,6 @@ export function add(repo: Repo, name: string, source?: string) {
     identity: null,
     sessionId: currentSession(),
     windowId: null,
-    label: `${basename(repo.primary)}/${name} [wr:${crypto.randomUUID()}]`,
     phase: "creating",
     expectedHead: null,
     force: false,
@@ -130,7 +130,7 @@ export function add(repo: Repo, name: string, source?: string) {
   entry.phase = "ready";
   repo.save();
 
-  entry.windowId = openTab(entry, cfg.panes);
+  entry.windowId = openTab(entry, cfg.panes, label);
   repo.save();
   console.log(`${name}\t${path}\topen`);
 }

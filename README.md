@@ -45,6 +45,8 @@ New branches start at the invoking checkout's HEAD unless you pass `--branch`. E
 
 Worktrees live beside the primary checkout in `<repo>__worktrees/`. Branch names become directory names, with `feature/login` encoded as `feature%2Flogin`.
 
+Tabs are named `<repo>/<branch>`. `wr` tracks them by their Rex window IDs, so you can rename them.
+
 Repeat `add` to focus an open tab or reopen a closed one. It does not reapply file rules or recreate missing worktrees. `wr` refuses to adopt worktrees it did not create.
 
 `ls`, also spelled `list`, shows this repo's registered worktrees, including closed tabs and missing directories.
@@ -171,7 +173,9 @@ Commands finish Git cleanup before closing their own tab in the background.
 
 A rebase conflict leaves the worktree and tab open. Resolve and stage the changes in that worktree. Run `git rebase --continue`, or abort with `git rebase --abort`. Retry `wr merge <branch>` afterward. Finish or abort any Git operation before retrying a merge.
 
-If Rex fails after worktree creation, retry `add`. If file setup fails, the entry stays `creating`. Inspect it, then use `wr rm <branch> --force` to abandon it before starting again.
+If `add` fails or is interrupted while opening a tab, inspect Rex before retrying. A tab may have opened without its window ID being saved. Close that tab manually, then retry `add` to reuse the worktree. `wr` does not find tabs by title.
+
+If file setup fails, the entry stays `creating`. Inspect it, then use `wr rm <branch> --force` to abandon it before starting again.
 
 If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <branch>`. Background errors go to `cleanup.log` beside the registry.
 

@@ -4,8 +4,6 @@ import type { Entry } from "./repo";
 
 const luaScript = process.env.WR_LUA ? resolve(process.env.WR_LUA) : null;
 
-class TabSelectionError extends Error {}
-
 function call(action: string, args: Record<string, unknown>): Record<string, unknown> {
   const command = luaScript ? [luaScript, "--action", action] : [action];
   const result = Bun.spawnSync(["rex", "--timeout", "30s", "do", ...command, "--args", JSON.stringify(args), "--json"], {
@@ -15,12 +13,6 @@ function call(action: string, args: Record<string, unknown>): Record<string, unk
 
   if (result.exitCode !== 0) {
     const message = result.stderr.toString().trim() || "action failed";
-    const selection =
-      action === "wr_open" &&
-      /^Error: wr_open ran, but client action \d+ of \d+, session\.select, failed:\s*([\s\S]+)$/.exec(message);
-    if (selection) {
-      throw new TabSelectionError(selection[1]);
-    }
     throw new Error(`Rex: ${message}`);
   }
 
@@ -28,7 +20,7 @@ function call(action: string, args: Record<string, unknown>): Record<string, unk
 }
 
 function target(entry: Entry) {
-  return { session_id: entry.sessionId, window_id: entry.windowId ?? undefined, label: entry.label };
+  return { session_id: entry.sessionId, window_id: entry.windowId ?? undefined };
 }
 
 export function inspectTab(entry: Entry): { windowId: string | null; sessionExists: boolean; ownTab: boolean } {
@@ -53,25 +45,19 @@ function warnSelection(message: string) {
   );
 }
 
-export function openTab(entry: Entry, panes: Pane[]): string {
+export function openTab(entry: Entry, panes: Pane[], label: string): string {
   try {
-    const result = call("wr_open", { ...target(entry), cwd: entry.path, panes });
+    const result = call("wr_open", { ...target(entry), label, cwd: entry.path, panes });
     const windowId = text(result.window_id, "window_id");
     if (result.warning) {
       warnSelection(text(result.warning, "warning"));
     }
     return windowId;
   } catch (error) {
-    if (!(error instanceof TabSelectionError)) {
-      throw error;
-    }
-
-    const status = inspectTab(entry);
-    if (!status.windowId) {
-      throw error;
-    }
-    warnSelection(error.message);
-    return status.windowId;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `${message}\nRex did not confirm the tab. If it created a new tab, close that tab manually before retrying wr add.`,
+    );
   }
 }
 

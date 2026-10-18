@@ -25,17 +25,17 @@ local function window(args)
     return nil, false
   end
 
+  if not args.window_id then
+    return nil, true
+  end
+
   local view = call("session.view", { session_id = args.session_id })
-  local found = nil
   for _, item in ipairs(view.windows or {}) do
-    if item.window_id == args.window_id or item.label == args.label then
-      if found ~= nil then
-        error("Ambiguous wr tab ownership", 0)
-      end
-      found = item
+    if item.window_id == args.window_id then
+      return item, true
     end
   end
-  return found, true
+  return nil, true
 end
 
 local function status(args)
@@ -56,7 +56,7 @@ end
 rex.action {
   name = "wr_status",
   title = "Inspect workrex tab",
-  args = { session_id = "string", window_id = "string?", label = "string", caller_block = "string?" },
+  args = { session_id = "string", window_id = "string?", caller_block = "string?" },
   run = function(_, args)
     return status(args)
   end,
@@ -145,7 +145,7 @@ rex.action {
 rex.action {
   name = "wr_close",
   title = "Close workrex tab",
-  args = { session_id = "string", window_id = "string?", label = "string" },
+  args = { session_id = "string", window_id = "string?" },
   run = function(_, args)
     local item = window(args)
     if item then

@@ -41,6 +41,7 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
     const view = JSON.parse(rex(["session", "inspect", session, "--json"]));
     const tab = view.windows.find((w: { window_id: string }) => w.window_id === entry.windowId);
     expect(view.active_window_id).toBe(entry.windowId);
+    expect(tab.label).toBe("project space/layout");
 
     const layout = tab.layers[0].layout;
     expect(layout.split.direction).toBe("horizontal");
@@ -60,8 +61,11 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
       expect(screen).toContain(marker);
     }
 
+    rex(["window", "rename", "-s", session, entry.windowId, "My custom title"]);
     expect(f.wr(["add", "layout"], f.primary, overrides).code).toBe(0);
-    expect(JSON.parse(rex(["session", "inspect", session, "--json"])).windows).toHaveLength(2);
+    const reused = JSON.parse(rex(["session", "inspect", session, "--json"]));
+    expect(reused.windows).toHaveLength(2);
+    expect(reused.windows.find((w: { window_id: string }) => w.window_id === entry.windowId).label).toBe("My custom title");
     console.log(JSON.stringify({
       window: entry.windowId,
       split: layout.split.direction,
@@ -72,7 +76,10 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
     rex(["window", "close", "-s", session, entry.windowId]);
     expect(f.wr(["ls"], f.primary, overrides).out).toContain("layout\tclosed");
     expect(f.wr(["add", "layout"], f.primary, overrides).code).toBe(0);
-    expect(f.state().entries[0].windowId).not.toBe(entry.windowId);
+    const reopenedId = f.state().entries[0].windowId;
+    expect(reopenedId).not.toBe(entry.windowId);
+    const reopened = JSON.parse(rex(["session", "inspect", session, "--json"]));
+    expect(reopened.windows.find((w: { window_id: string }) => w.window_id === reopenedId).label).toBe("project space/layout");
   } finally {
     rex(["kill", session]);
     f.dispose();

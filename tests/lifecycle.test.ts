@@ -191,6 +191,20 @@ test("rm --force can clean up failed file setup", () => {
   expect(existsSync(f.path("failed"))).toBe(false);
 });
 
+test.each(["merge", "rm"])("%s closes only the saved window ID, regardless of tab titles", (action) => {
+  add();
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  const other = { ...store.tabs[0], window_id: "window:unrelated", block_id: "block:unrelated" };
+  store.tabs[0].label = "Renamed work tab";
+  store.tabs.unshift(other);
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+
+  ok([action, "feature"]);
+
+  expect(f.tabs()).toEqual([other]);
+  expect(f.state().entries).toEqual([]);
+});
+
 test("tab closure failure retains a retryable registration after Git cleanup", () => {
   const path = add();
   commit(path);

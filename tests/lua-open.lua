@@ -5,7 +5,8 @@ local selected = nil
 local focused = nil
 local opened = 0
 local created_layout = nil
-local label = "workrex/test [wr:test]"
+local created_label = nil
+local label = "workrex/test"
 local window_id = "window:test"
 
 rex = {
@@ -18,11 +19,12 @@ rex = {
       return { sessions = { { session_id = "session:test" } } }
     end
     if method == "session.view" then
-      return { windows = options.existing and { { window_id = window_id, label = label } } or {} }
+      return { windows = options.windows or (options.existing and { { window_id = window_id, label = label } } or {}) }
     end
     if method == "session.new_window" then
       opened = opened + 1
       created_layout = args.layout
+      created_label = args.window_label
       return { window_id = window_id, block_ids = { "block:editor", "block:agent" } }
     end
     if method == "session.focus_window" then
@@ -56,4 +58,4 @@ local result = actions.wr_open({}, {
     { command = { "pi" }, split = "horizontal", percentage = 40, focus = true },
   },
 })
-return { result = result, selected = selected, focused = focused, opened = opened, layout = created_layout }
+return { result = result, selected = selected, focused = focused, opened = opened, layout = created_layout, label = created_label }

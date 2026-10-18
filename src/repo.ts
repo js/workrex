@@ -23,7 +23,6 @@ export type Entry = {
   identity: string | null;
   sessionId: string;
   windowId: string | null;
-  label: string;
   phase: "creating" | "ready" | "removing";
   expectedHead: string | null;
   force: boolean;
@@ -69,7 +68,6 @@ function parseEntry(value: unknown): Entry {
     identity: nullableText(entry.identity, "identity"),
     sessionId: text(entry.sessionId, "sessionId"),
     windowId: nullableText(entry.windowId, "windowId"),
-    label: text(entry.label, "label"),
     phase,
     expectedHead: nullableText(entry.expectedHead, "expectedHead"),
     force: entry.force,

@@ -10,7 +10,7 @@ if (!path) {
 }
 
 const state = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : { tabs: [], serial: 0 };
-let tab = state.tabs.find((t) => t.session_id === args.session_id && (t.window_id === args.window_id || t.label === args.label));
+let tab = state.tabs.find((t) => t.session_id === args.session_id && t.window_id === args.window_id);
 const fail = process.env.WR_FAKE_FAIL;
 const controlError = "Rex.app is not accepting actions. Turn on Remote Control in its Settings under Rex Server.";
 
