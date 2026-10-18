@@ -107,7 +107,7 @@ The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the 
 }
 ```
 
-[examples/config.json](examples/config.json) adds a `.claude/settings.local.json` symlink rule. Use it only where that source file exists.
+[examples/config.json](examples/config.json) adds a `.claude/settings.local.json` symlink rule. `wr` skips it if the source file is missing.
 
 ### Panes
 
@@ -130,7 +130,7 @@ Paths name files or directories relative to the primary checkout, not glob patte
 
 Copies happen once at worktree creation and remain independent. Symlinks share the source, so changes through a linked `node_modules` affect the primary checkout too.
 
-`wr` rejects missing sources, existing destinations, and overlapping rules. Sources must resolve inside the primary checkout. Paths cannot be absolute or contain `.`, `..`, or `.git` components. Copy sources cannot contain symlinks or Git metadata. Use a symlink rule for directories containing symlinks.
+`wr add` skips copy and symlink rules whose sources are missing. For the remaining rules, `wr` rejects existing destinations and overlaps. Sources must resolve inside the primary checkout. Paths cannot be absolute or contain `.`, `..`, or `.git` components. Copy sources cannot contain symlinks or Git metadata. Use a symlink rule for directories containing symlinks.
 
 Ignore rule destinations in Git, especially `.env`, to avoid accidental commits and untracked changes.
 

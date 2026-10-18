@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { executable, fixture } from "./helpers";
 
@@ -57,14 +57,16 @@ test("add refuses unmanaged worktrees and path collisions", () => {
 });
 
 test("copy and symlink rules use the primary checkout, and arrays replace global defaults", () => {
-  f.global({ files: { copy: ["nonexistent"], symlink: ["secret.txt"] }, panes: [{ command: ["sh"] }] });
+  f.global({ files: { copy: ["global.txt"], symlink: ["secret.txt"] }, panes: [{ command: ["sh"] }] });
   f.local({ files: { copy: [".env"] } });
+  f.write(join(f.primary, "global.txt"), "global\n");
   f.write(join(f.primary, ".env"), "primary\n");
   f.write(join(f.primary, "secret.txt"), "secret\n");
   f.git(["add", ".workrex.json"]);
   f.git(["commit", "-m", "Config"]);
 
   const first = add("first");
+  expect(existsSync(join(first, "global.txt"))).toBe(false);
   expect(readFileSync(join(first, ".env"), "utf8")).toBe("primary\n");
   expect(readlinkSync(join(first, "secret.txt"))).toBe(join(f.primary, "secret.txt"));
   expect(f.tabs()[0].panes).toHaveLength(1);
@@ -78,6 +80,33 @@ test("copy and symlink rules use the primary checkout, and arrays replace global
   expect(readFileSync(join(first, ".env"), "utf8")).toBe("worktree\n");
 });
 
+test.each(["copy", "symlink"] as const)("add skips missing %s sources and applies existing rules", (kind) => {
+  f.global({ files: { [kind]: ["missing.txt", ".claude/settings.local.json", "local", "local/missing.txt", "missing-dir/after.txt"] } });
+  f.write(join(f.primary, "local/present.txt"), "present\n");
+
+  const path = add("optional");
+  expect(readFileSync(join(path, "local/present.txt"), "utf8")).toBe("present\n");
+  expect(lstatSync(join(path, "local")).isSymbolicLink()).toBe(kind === "symlink");
+  if (kind === "symlink") {
+    expect(readlinkSync(join(path, "local"))).toBe(join(f.primary, "local"));
+  }
+  for (const missing of ["missing.txt", ".claude", "local/missing.txt", "missing-dir"]) {
+    expect(lstatSync(join(path, missing), { throwIfNoEntry: false })).toBeUndefined();
+  }
+  expect(f.state().entries[0].phase).toBe("ready");
+  expect(f.tabs()).toHaveLength(1);
+});
+
+test("add succeeds when all copy and symlink sources are missing", () => {
+  f.local({ files: { copy: [".env"], symlink: [".claude/settings.local.json"] } });
+
+  const path = add("all-missing");
+  expect(lstatSync(join(path, ".env"), { throwIfNoEntry: false })).toBeUndefined();
+  expect(lstatSync(join(path, ".claude"), { throwIfNoEntry: false })).toBeUndefined();
+  expect(f.state().entries[0].phase).toBe("ready");
+  expect(f.tabs()).toHaveLength(1);
+});
+
 test("file collisions preserve tracked content and the failed registration", () => {
   f.local({ files: { copy: ["tracked.txt"] } });
   expect(f.wr(["add", "collision"]).err).toContain("destination already exists");
@@ -87,7 +116,7 @@ test("file collisions preserve tracked content and the failed registration", () 
   expect(f.wr(["add", "collision"]).err).toContain("unfinished");
 });
 
-test("file rules refuse traversal, symlink escapes, overlap, and missing sources", () => {
+test("file rules refuse traversal, symlink escapes, and overlap", () => {
   f.local({ files: { copy: ["../outside"] } });
   expect(f.wr(["add", "escape"]).err).toContain("Unsafe file rule");
   expect(existsSync(f.path("escape"))).toBe(false);
@@ -99,9 +128,6 @@ test("file rules refuse traversal, symlink escapes, overlap, and missing sources
 
   f.local({ files: { copy: ["tracked.txt"], symlink: ["tracked.txt"] } });
   expect(f.wr(["add", "escape"]).err).toContain("Overlapping");
-
-  f.local({ files: { copy: ["missing"] } });
-  expect(f.wr(["add", "escape"]).err).toContain("does not exist");
 });
 
 test("closed or timed-out tabs are recovered without duplicate worktrees or file copies", () => {

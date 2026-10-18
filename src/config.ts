@@ -122,9 +122,7 @@ export function fileRules(primary: string, cfg: Config): FileRule[] {
   const rules: FileRule[] = [
     ...cfg.files.copy.map((path): FileRule => ({ kind: "copy", path })),
     ...cfg.files.symlink.map((path): FileRule => ({ kind: "symlink", path })),
-  ];
-
-  for (const rule of rules) {
+  ].filter((rule) => {
     const parts = rule.path.split("/");
     if (isAbsolute(rule.path) || parts.some((p) => !p || p === "." || p === ".." || p === ".git")) {
       throw new Error(`Unsafe file rule: ${rule.path}`);
@@ -132,7 +130,7 @@ export function fileRules(primary: string, cfg: Config): FileRule[] {
 
     const source = join(primary, rule.path);
     if (!present(source)) {
-      throw new Error(`File-rule source does not exist: ${source}`);
+      return false;
     }
     if (!inside(primary, realpathSync(source))) {
       throw new Error(`File-rule source escapes primary checkout: ${source}`);
@@ -140,7 +138,8 @@ export function fileRules(primary: string, cfg: Config): FileRule[] {
     if (rule.kind === "copy") {
       checkCopy(source);
     }
-  }
+    return true;
+  });
 
   for (let i = 0; i < rules.length; i++) {
     for (let j = i + 1; j < rules.length; j++) {
