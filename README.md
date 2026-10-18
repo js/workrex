@@ -120,7 +120,9 @@ The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the 
 
 Only the second pane accepts `split` and `percentage`. At most one pane can set `focus: true`. If none does, the first pane gets focus.
 
-Use argument arrays such as `["npm", "run", "dev"]`, not `["npm run dev"]`. For shell syntax or variable expansion, use `["sh", "-c", "your shell command"]`.
+Each pane starts Rex's default interactive shell and runs its command there. When the command exits, the shell stays open in the worktree.
+
+Use argument arrays such as `["npm", "run", "dev"]`, not `["npm run dev"]`. Arguments are quoted literally. For shell syntax or variable expansion, use `["sh", "-c", "your shell command"]`.
 
 Pane changes apply to new or reopened tabs. Repeating `add` for an open tab does not change its layout or restart commands.
 
@@ -183,7 +185,7 @@ bun run check
 bun test
 ```
 
-Default tests use temporary Git repositories and a fake Rex executable. `bun run test:rex` checks the live layout, tab reopening, and cleanup from inside a tab. It creates and destroys its own Rex sessions and leaves `init.lua` unchanged.
+Default tests use temporary Git repositories and a fake Rex executable. `bun run test:rex` checks the live layout, shell prompts after commands exit, tab reopening, and cleanup from inside a tab. It creates and destroys its own Rex sessions and leaves `init.lua` unchanged.
 
 To test the Lua module without installing or reloading it:
 

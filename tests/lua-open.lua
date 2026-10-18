@@ -4,6 +4,7 @@ local actions = {}
 local selected = nil
 local focused = nil
 local opened = 0
+local created_layout = nil
 local label = "workrex/test [wr:test]"
 local window_id = "window:test"
 
@@ -21,6 +22,7 @@ rex = {
     end
     if method == "session.new_window" then
       opened = opened + 1
+      created_layout = args.layout
       return { window_id = window_id, block_ids = { "block:editor", "block:agent" } }
     end
     if method == "session.focus_window" then
@@ -49,9 +51,9 @@ dofile(options.module)
 local result = actions.wr_open({}, {
   session_id = "session:test", window_id = options.existing and window_id or nil,
   label = label, cwd = "/test",
-  panes = {
+  panes = options.command and { { command = options.command } } or {
     { command = { "nvim", "." } },
     { command = { "pi" }, split = "horizontal", percentage = 40, focus = true },
   },
 })
-return { result = result, selected = selected, focused = focused, opened = opened }
+return { result = result, selected = selected, focused = focused, opened = opened, layout = created_layout }

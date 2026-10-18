@@ -6,6 +6,13 @@ local function call(method, args)
   return result
 end
 
+local function shell_quote(arg)
+  -- Escape outside the quotes: fish also interprets backslashes inside single quotes.
+  return "'" .. arg:gsub("[\\']", function(char)
+    return "'\\" .. char .. "'"
+  end) .. "'"
+end
+
 local function window(args)
   local sessions = call("session.list", {}).sessions or {}
   local exists = false
@@ -80,15 +87,17 @@ rex.action {
         if type(pane.command) ~= "table" or #pane.command == 0 then
           error("Pane command must be an argument array", 0)
         end
-        for _, arg in ipairs(pane.command) do
+        local command = {}
+        for j, arg in ipairs(pane.command) do
           if type(arg) ~= "string" then
             error("Command arguments must be strings", 0)
           end
+          command[j] = shell_quote(arg)
         end
 
         blocks[i] = rex.layout.block {
           flavor = "com.superlogical.terminal.shell",
-          options = { command = pane.command, cwd = args.cwd },
+          options = { cwd = args.cwd, initial_input = table.concat(command, " ") .. "\r" },
         }
         if pane.focus then
           focused = i
