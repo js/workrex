@@ -87,7 +87,7 @@ export function merge(repo: Repo, name: string, into: string | undefined, force:
   entry.expectedHead = head;
   entry.force = false;
   repo.save();
-  console.log(`Merged ${name} into ${target}.`);
+  console.log(`Rebased ${name} onto ${target} and fast-forwarded ${target}.`);
   return finishRemoval(repo, entry);
 }
 

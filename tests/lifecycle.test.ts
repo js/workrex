@@ -32,8 +32,9 @@ test("merge rebases onto the default branch, fast-forwards, and removes all owne
   commit(f.primary, "main.txt", "main\n");
   const previous = f.git(["rev-parse", "main"]);
 
-  ok(["merge", "feature"]);
+  const result = ok(["merge", "feature"]);
 
+  expect(result.out).toBe("Rebased feature onto main and fast-forwarded main.\nRemoved feature.\n");
   expect(f.git(["rev-parse", "main^"])).toBe(previous);
   expect(readFileSync(join(f.primary, "feature.txt"), "utf8")).toBe("feature\n");
   expect(existsSync(path)).toBe(false);
@@ -48,8 +49,9 @@ test("merge into an unchecked-out branch does not switch the primary checkout", 
   commit(path);
   const main = f.git(["rev-parse", "main"]);
 
-  ok(["merge", "feature", "--into", "target"]);
+  const result = ok(["merge", "feature", "--into", "target"]);
 
+  expect(result.out).toBe("Rebased feature onto target and fast-forwarded target.\nRemoved feature.\n");
   expect(f.git(["branch", "--show-current"])).toBe("main");
   expect(f.git(["rev-parse", "main"])).toBe(main);
   expect(f.git(["show", "target:feature.txt"])).toBe("feature");
