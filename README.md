@@ -33,6 +33,19 @@ wr --help
 
 Run `add` inside a Rex terminal so it can use `REX_SESSION`. Other commands find tabs through the repo's registry. Rex must be reachable for tab operations. For automatic tab switching, enable Remote Control under Rex Server in Rex's Settings.
 
+## Agent skill
+
+[skills/workrex](skills/workrex/SKILL.md) teaches coding agents how to use `wr`, change global and per-project config, validate settings without opening tabs, and recover interrupted operations.
+
+From this checkout, install it for agents that load `~/.claude/skills`:
+
+```sh
+mkdir -p "$HOME/.claude/skills"
+ln -s "$PWD/skills/workrex" "$HOME/.claude/skills/workrex"
+```
+
+Inspect any existing skill at that path before replacing it. The symlink keeps the skill aligned with this checkout. Start a new agent session if it is not discovered automatically.
+
 ## Create and list worktrees
 
 ```sh

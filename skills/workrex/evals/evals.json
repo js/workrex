@@ -1,0 +1,23 @@
+{
+  "skill_name": "workrex",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Plan a Workrex config change without touching any files. I'm in /projects/shop__worktrees/fix-login; the primary checkout is /projects/shop. XDG_CONFIG_HOME=/home/dev/settings. The global config is {\"panes\":[{\"command\":[\"pi\"]}],\"files\":{\"copy\":[\"global.txt\"],\"symlink\":[\"node_modules\"]}}. The primary project's .workrex.json is {\"main_branch\":\"develop\"}, and develop exists locally. For this project only, copy .env instead of global.txt and stop sharing node_modules. Keep the inherited pane setup and merge target. Give the exact file path and final JSON, explain what is inherited, and say whether wr add fix-login will apply the file changes to my existing open worktree.",
+      "expected_output": "Edits /projects/shop/.workrex.json, retaining main_branch develop and adding files.copy [.env] and files.symlink []; omits panes to inherit global pi. Identifies the global config as /home/dev/settings/workrex/config.json. Explains replacement rather than concatenation, ignored secret destinations, and that file rules only apply at creation, not on repeated add. Makes no filesystem changes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Give me the proposed JSON and verification steps only; don't change my machine. XDG_CONFIG_HOME is unset. My global Workrex config is {\"files\":{\"copy\":[\".env\"]}}. Make future tabs in all repos use nvim above pi, with pi focused and taking 60%. One repo already has .workrex.json containing {\"panes\":[{\"command\":[\"claude\"]}]}. Should that repo change too? Will existing tabs rearrange, and do I need rex config reload? How can I validate without opening tabs?",
+      "expected_output": "Targets ~/.config/workrex/config.json and preserves files.copy. Writes a full two-pane layout with split vertical, percentage 60 and focus true only on the second pane. Explains project panes masks the global change and leaves it alone. Existing tabs are not rearranged, new/reopened tabs use new config, and JSON changes do not need Rex reload. Uses the installed config loader for read-only validation, not invented wr config commands or wr ls/add as validation.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Explain the Workrex commands, don't execute them. I want to create fix-login from the existing local develop branch in my current Rex session, then close/reopen its tab, and eventually merge it into develop. My main_branch config says main. If merge refuses because I have uncommitted changes, can you just retry with --force? Also, does closing the tab remove the branch?",
+      "expected_output": "Uses wr add fix-login --branch develop for initial creation, wr add fix-login without --branch to reopen, and wr merge fix-login --into develop for the merge. Explains that closing a tab leaves the registered worktree/branch, add's source does not change the merge target, and merge rebases then fast-forwards and cleans up. Does not treat a generic refusal as permission to discard: explains force loses tracked/untracked work, inspects changes and seeks explicit informed authorization rather than automatically retrying. Makes no changes.",
+      "files": []
+    }
+  ]
+}
