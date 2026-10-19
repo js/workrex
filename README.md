@@ -75,7 +75,7 @@ Both config files are optional JSONC objects with the same options. They accept 
 | Global, for all repos | `~/.config/workrex/config.jsonc` |
 | Project, for one repo and its worktrees | `.workrex.jsonc` in the primary checkout |
 
-If `XDG_CONFIG_HOME` is nonempty, the global path is `$XDG_CONFIG_HOME/workrex/config.jsonc`. `wr` always reads project settings from the primary checkout, not the worktree where you run it.
+If `XDG_CONFIG_HOME` is nonempty, the global path is `$XDG_CONFIG_HOME/workrex/config.jsonc`. Worktree commands always read project settings from the primary checkout, not the worktree where you run them.
 
 Existing `config.json` and `.workrex.json` files still work and also accept comments. In each location, `.jsonc` takes precedence over `.json`. The two files are not merged. An invalid `.jsonc` file reports an error rather than falling back to `.json`.
 
@@ -94,6 +94,16 @@ This project `.workrex.jsonc` keeps the inherited panes, copies `.env`, clears g
 ```
 
 Omit `files.symlink` to keep the global symlink rules instead. Commit `.workrex.jsonc` to share settings, or ignore it to keep them local and avoid untracked changes. `wr` rejects unknown options.
+
+### Check config files
+
+```sh
+wr config check
+```
+
+Reports whether the global `config.jsonc` and `$CWD/.workrex.jsonc` exist and whether each is valid JSONC. It honors `XDG_CONFIG_HOME` for the global path and checks both files even if one fails. Missing files are optional and do not cause failure; invalid JSONC or a read error exits with status 1.
+
+This is a syntax-only check of those two `.jsonc` files, not a validation of Workrex settings or legacy `.json` files. Unlike worktree commands, it checks the current directory rather than the primary checkout and works outside a Git repository.
 
 ### Options and defaults
 

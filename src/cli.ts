@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { Repo } from "./repo";
+import { checkConfig } from "./config";
 import { add, list } from "./workrex";
 import { deferTabCleanup, merge, remove } from "./lifecycle";
 
@@ -14,14 +15,20 @@ export async function run(args: string[]) {
       "Usage: wr add <name> [--branch <source>]\n" +
         "       wr merge <name> [--into <target>] [--force]\n" +
         "       wr rm <name> [--force]\n" +
-        "       wr ls",
+        "       wr ls\n" +
+        "       wr config check",
     );
     return;
   }
 
   const command = args[0];
 
-  if (command === "ls" || command === "list") {
+  if (command === "config") {
+    if (args.length !== 2 || args[1] !== "check") {
+      throw new Error("Usage: wr config check");
+    }
+    checkConfig(process.cwd());
+  } else if (command === "ls" || command === "list") {
     if (args.length !== 1) {
       throw new Error("Usage: wr ls");
     }

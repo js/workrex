@@ -38,6 +38,36 @@ export type SplitPane = { command: string | string[]; focus: boolean; split: Spl
 export type Layout = [RootPane, ...SplitPane[]];
 export type Config = { panes: Layout; files: { copy: string[]; symlink: string[] }; main_branch?: string };
 
+function globalConfigBase(): string {
+  return join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "workrex/config");
+}
+
+export function checkConfig(cwd: string) {
+  let failed = false;
+  for (const [scope, path] of [
+    ["Global", `${globalConfigBase()}.jsonc`],
+    ["Project", join(cwd, ".workrex.jsonc")],
+  ]) {
+    console.log(`${scope}: ${path}`);
+    try {
+      if (!present(path)) {
+        console.log("  not found (optional)");
+        continue;
+      }
+      console.log("  exists");
+      Bun.JSONC.parse(readFileSync(path, "utf8"));
+      console.log("  valid JSONC");
+    } catch (error) {
+      const status = error instanceof SyntaxError ? "invalid JSONC" : "error";
+      console.log(`  ${status}: ${error instanceof Error ? error.message : String(error)}`);
+      failed = true;
+    }
+  }
+  if (failed) {
+    throw new Error("Config check failed");
+  }
+}
+
 function readConfig(basePath: string): Record<string, unknown> {
   const path = [`${basePath}.jsonc`, `${basePath}.json`].find(existsSync);
   if (!path) {
@@ -51,7 +81,7 @@ export function config(primary: string): Config {
     panes: [{ command: ["nvim", "."] }, { command: ["pi"], split: "horizontal", percentage: 40, focus: true }],
     files: { copy: [], symlink: [] },
   };
-  const global = readConfig(join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "workrex/config"));
+  const global = readConfig(globalConfigBase());
   const local = readConfig(join(primary, ".workrex"));
   for (const layer of [global, local]) {
     keys(layer, ["panes", "files", "main_branch"], "configuration");
