@@ -31,8 +31,12 @@ function strings(value: unknown, label: string): string[] {
   return value.map((item) => text(item, label));
 }
 
-export type Pane = { command: string[]; focus: boolean; split?: "horizontal" | "vertical"; percentage?: number };
-export type Config = { panes: Pane[]; files: { copy: string[]; symlink: string[] }; main_branch?: string };
+type Direction = "horizontal" | "vertical";
+export type Split = { from: number; direction: Direction; percentage: number };
+export type RootPane = { command: string | string[]; focus: boolean; split?: never };
+export type SplitPane = { command: string | string[]; focus: boolean; split: Split };
+export type Layout = [RootPane, ...SplitPane[]];
+export type Config = { panes: Layout; files: { copy: string[]; symlink: string[] }; main_branch?: string };
 
 function readConfig(path: string): Record<string, unknown> {
   if (!existsSync(path)) {
@@ -56,47 +60,61 @@ export function config(primary: string): Config {
   const files = { copy: [], symlink: [], ...object(global.files ?? {}, "files"), ...object(local.files ?? {}, "files") };
   keys(files, ["copy", "symlink"], "files");
 
-  if (!Array.isArray(merged.panes) || merged.panes.length < 1 || merged.panes.length > 2) {
-    throw new Error("panes must contain one or two panes");
-  }
-  const panes = merged.panes.map((value, index): Pane => {
-    const pane = object(value, "pane");
-    keys(pane, ["command", "focus", "split", "percentage"], "pane");
+  return {
+    panes: parsePanes(merged.panes),
+    files: { copy: strings(files.copy, "files.copy"), symlink: strings(files.symlink, "files.symlink") },
+    main_branch: merged.main_branch === undefined ? undefined : text(merged.main_branch, "main_branch"),
+  };
+}
 
-    const command = strings(pane.command, "pane.command");
+function parsePanes(value: unknown): Layout {
+  if (!Array.isArray(value) || !value.length) {
+    throw new Error("panes must be a nonempty array");
+  }
+  const ids = new Map<string, number>();
+  const panes = value.map((item, index): SplitPane => {
+    const pane = object(item, "pane");
+    keys(pane, ["id", "command", "focus", "split_from", "split", "percentage"], "pane");
+
+    const command = typeof pane.command === "string" ? text(pane.command, "pane.command") : strings(pane.command, "pane.command");
     if (!command.length) {
       throw new Error("pane.command must not be empty");
     }
     if (pane.focus !== undefined && typeof pane.focus !== "boolean") {
       throw new Error("pane.focus must be boolean");
     }
-
-    if (index === 0) {
-      if (pane.split !== undefined || pane.percentage !== undefined) {
-        throw new Error("Only the second pane can specify a split");
-      }
-      return { command, focus: pane.focus === true };
+    if (index === 0 && (pane.split_from !== undefined || pane.split !== undefined || pane.percentage !== undefined)) {
+      throw new Error("The first pane cannot specify split_from, split, or percentage");
     }
 
-    const split = pane.split ?? "horizontal";
-    if (split !== "horizontal" && split !== "vertical") {
+    const from = pane.split_from === undefined ? index - 1 : ids.get(text(pane.split_from, "pane.split_from"));
+    if (from === undefined) {
+      throw new Error(`pane.split_from must name the id of an earlier pane: ${pane.split_from}`);
+    }
+    const direction = pane.split ?? "horizontal";
+    if (direction !== "horizontal" && direction !== "vertical") {
       throw new Error("pane.split must be horizontal or vertical");
     }
     const percentage = pane.percentage ?? 40;
     if (typeof percentage !== "number" || !Number.isInteger(percentage) || percentage < 1 || percentage > 99) {
       throw new Error("pane.percentage must be an integer from 1 to 99");
     }
-    return { command, focus: pane.focus === true, split, percentage };
+
+    if (pane.id !== undefined) {
+      const id = text(pane.id, "pane.id");
+      if (ids.has(id)) {
+        throw new Error(`Duplicate pane id: ${id}`);
+      }
+      ids.set(id, index);
+    }
+    return { command, focus: pane.focus === true, split: { from, direction, percentage } };
   });
   if (panes.filter((pane) => pane.focus).length > 1) {
     throw new Error("Only one pane can have focus");
   }
 
-  return {
-    panes,
-    files: { copy: strings(files.copy, "files.copy"), symlink: strings(files.symlink, "files.symlink") },
-    main_branch: merged.main_branch === undefined ? undefined : text(merged.main_branch, "main_branch"),
-  };
+  const [{ command, focus }, ...rest] = panes;
+  return [{ command, focus }, ...rest];
 }
 
 export function inside(root: string, path: string): boolean {

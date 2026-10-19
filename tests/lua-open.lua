@@ -25,7 +25,7 @@ rex = {
       opened = opened + 1
       created_layout = args.layout
       created_label = args.window_label
-      return { window_id = window_id, block_ids = { "block:editor", "block:agent" } }
+      return { window_id = window_id, block_ids = options.block_ids or { "block:editor", "block:agent" } }
     end
     if method == "session.focus_window" then
       focused = args.window_id
@@ -50,12 +50,15 @@ rex = {
 }
 
 dofile(options.module)
-local result = actions.wr_open({}, {
+local ok, result = pcall(actions.wr_open, {}, {
   session_id = "session:test", window_id = options.existing and window_id or nil,
   label = label, cwd = "/test",
-  panes = options.command and { { command = options.command } } or {
+  panes = options.panes or options.command and { { command = options.command } } or {
     { command = { "nvim", "." } },
     { command = { "pi" }, split = "horizontal", percentage = 40, focus = true },
   },
 })
-return { result = result, selected = selected, focused = focused, opened = opened, layout = created_layout, label = created_label }
+return {
+  result = ok and result or nil, error = not ok and result or nil,
+  selected = selected, focused = focused, opened = opened, layout = created_layout, label = created_label,
+}

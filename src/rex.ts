@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { object, text, type Pane } from "./config";
+import { object, text, type Layout } from "./config";
 import type { Entry } from "./repo";
 
 const luaScript = process.env.WR_LUA ? resolve(process.env.WR_LUA) : null;
@@ -45,9 +45,14 @@ function warnSelection(message: string) {
   );
 }
 
-export function openTab(entry: Entry, panes: Pane[], label: string): string {
+export function openTab(entry: Entry, panes: Layout, label: string): string {
   try {
-    const result = call("wr_open", { ...target(entry), label, cwd: entry.path, panes });
+    const result = call("wr_open", {
+      ...target(entry), label, cwd: entry.path,
+      panes: panes.map(({ command, focus, split }) => ({
+        command, focus, parent: split && split.from + 1, split: split?.direction, percentage: split?.percentage,
+      })),
+    });
     const windowId = text(result.window_id, "window_id");
     if (result.warning) {
       warnSelection(text(result.warning, "warning"));

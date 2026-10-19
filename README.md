@@ -84,7 +84,7 @@ Omit `files.symlink` to keep the global symlink rules instead. Commit `.workrex.
 
 | Option | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `panes` | Array of one or two pane objects | See below | Commands and layout for new tabs |
+| `panes` | Nonempty array of pane objects | See below | Commands and layout for new tabs |
 | `files.copy` | Array of relative paths | `[]` | Copy files or directories from the primary checkout |
 | `files.symlink` | Array of relative paths | `[]` | Link files or directories to the primary checkout |
 | `main_branch` | Nonempty string | Auto-detected | Default merge target and branch used by `rm` to check for unmerged commits |
@@ -109,24 +109,55 @@ The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the 
 }
 ```
 
-[examples/config.json](examples/config.json) adds a `.claude/settings.local.json` symlink rule. `wr` skips it if the source file is missing.
+[examples/config.json](examples/config.json) adds a third pane that runs `bun run start:bff` below `pi`, as described in [Panes](#panes). It also adds a `.claude/settings.local.json` symlink rule. `wr` skips the rule if the source file is missing.
 
 ### Panes
 
+`wr` builds the layout in list order. The first pane fills the tab. Each later pane splits an earlier pane in two and takes the right or bottom part.
+
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `command` | Nonempty array of nonempty strings | Required | Executable and arguments, run in the worktree directory |
+| `id` | Nonempty string | None | Name that later panes use in `split_from` |
+| `command` | Nonempty string or nonempty array of nonempty strings | Required | Shell command or literal arguments, run in the worktree directory |
 | `focus` | Boolean | `false` | Focus this pane when creating the tab |
-| `split` | `"horizontal"` or `"vertical"` | `"horizontal"` | Side by side or stacked top to bottom |
-| `percentage` | Integer from 1 to 99 | `40` | Second pane's share of the split |
+| `split_from` | `id` of an earlier pane | The previous pane | Pane to split |
+| `split` | `"horizontal"` or `"vertical"` | `"horizontal"` | Put this pane to the right of the split pane, or below it |
+| `percentage` | Integer from 1 to 99 | `40` | This pane's share of the split pane's space |
 
-Only the second pane accepts `split` and `percentage`. At most one pane can set `focus: true`. If none does, the first pane gets focus.
+The first pane cannot set `split_from`, `split`, or `percentage`. `id` values must be unique. At most one pane can set `focus: true`. If none does, the first pane gets focus.
+
+This layout gives `nvim` the left 40 percent of the tab. `pi` gets focus and the top 72 percent of the right column, and `bun run start:bff` runs below it:
+
+```json
+{
+  "panes": [
+    { "command": "nvim ." },
+    {
+      "command": "pi",
+      "split": "horizontal",
+      "percentage": 60,
+      "focus": true
+    },
+    {
+      "command": "bun run start:bff",
+      "split": "vertical",
+      "percentage": 28
+    }
+  ]
+}
+```
+
+`pi` sets `percentage` to 60 because it takes 60 percent of the width from `nvim`, which keeps the other 40. `bun run start:bff` then takes 28 percent of the height from `pi`. To split a pane other than the previous one, give that pane an `id` and refer to it with `split_from`. Several panes can split the same pane. Each takes its percentage of the space that pane has left.
 
 Each pane starts Rex's default interactive shell and runs its command there. When the command exits, the shell stays open in the worktree.
 
-Use argument arrays such as `["npm", "run", "dev"]`, not `["npm run dev"]`. Arguments are quoted literally. For shell syntax or variable expansion, use `["sh", "-c", "your shell command"]`.
+A string such as `"bun install && bun run start:bff"` runs as written in Rex's configured shell. That shell interprets quotes, variables, wildcards, and operators. Use its syntax, which may differ from `sh`.
+
+An array such as `["nvim", "notes with spaces.md"]` preserves each argument literally, without variable or wildcard expansion. Both forms can appear in the same layout. `["npm run dev"]` is one executable name, not three arguments.
 
 Pane changes apply to new or reopened tabs. Repeating `add` for an open tab does not change its layout or restart commands.
+
+After you update `wr`, run `rex config reload`. Rex keeps using the `rex/wr.lua` it loaded last, and versions before nested panes reject more than two panes.
 
 ### File rules
 
