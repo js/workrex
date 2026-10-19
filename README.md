@@ -55,20 +55,22 @@ Repeat `add` to focus an open tab or reopen a closed one. It does not reapply fi
 
 ### Global and per-project settings
 
-Both config files are optional JSON objects with the same options:
+Both config files are optional JSONC objects with the same options. They accept ordinary JSON, `//` line comments, `/* ... */` block comments, and trailing commas:
 
 | Scope | Location |
 | --- | --- |
-| Global, for all repos | `~/.config/workrex/config.json` |
-| Project, for one repo and its worktrees | `.workrex.json` in the primary checkout |
+| Global, for all repos | `~/.config/workrex/config.jsonc` |
+| Project, for one repo and its worktrees | `.workrex.jsonc` in the primary checkout |
 
-If `XDG_CONFIG_HOME` is nonempty, the global path is `$XDG_CONFIG_HOME/workrex/config.json`. `wr` always reads project settings from the primary checkout, not the worktree where you run it.
+If `XDG_CONFIG_HOME` is nonempty, the global path is `$XDG_CONFIG_HOME/workrex/config.jsonc`. `wr` always reads project settings from the primary checkout, not the worktree where you run it.
+
+Existing `config.json` and `.workrex.json` files still work and also accept comments. In each location, `.jsonc` takes precedence over `.json`. The two files are not merged. An invalid `.jsonc` file reports an error rather than falling back to `.json`.
 
 Project settings override global settings. Unset fields use the global value, or the built-in default if neither file sets it. Each array replaces the inherited list. `panes` replaces the whole layout, while `files.copy` and `files.symlink` replace their lists independently. Use `[]` to clear a file list.
 
-This project `.workrex.json` keeps the inherited panes, copies `.env`, clears global symlink rules, and uses `develop` as the default branch:
+This project `.workrex.jsonc` keeps the inherited panes, copies `.env`, clears global symlink rules, and uses `develop` as the default branch:
 
-```json
+```jsonc
 {
   "main_branch": "develop",
   "files": {
@@ -78,7 +80,7 @@ This project `.workrex.json` keeps the inherited panes, copies `.env`, clears gl
 }
 ```
 
-Omit `files.symlink` to keep the global symlink rules instead. Commit `.workrex.json` to share settings, or ignore it to keep them local and avoid untracked changes. `wr` rejects unknown options.
+Omit `files.symlink` to keep the global symlink rules instead. Commit `.workrex.jsonc` to share settings, or ignore it to keep them local and avoid untracked changes. `wr` rejects unknown options.
 
 ### Options and defaults
 
@@ -109,7 +111,7 @@ The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the 
 }
 ```
 
-[examples/config.json](examples/config.json) adds a third pane that runs `bun run start:bff` below `pi`, as described in [Panes](#panes). It also adds a `.claude/settings.local.json` symlink rule. `wr` skips the rule if the source file is missing.
+The commented [examples/config.jsonc](examples/config.jsonc) adds a third pane that runs `bun run start:bff` below `pi`, as described in [Panes](#panes). It also adds a `.claude/settings.local.json` symlink rule. `wr` skips the rule if the source file is missing.
 
 ### Panes
 

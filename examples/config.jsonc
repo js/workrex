@@ -1,0 +1,36 @@
+{
+  // Each pane splits the previous pane unless split_from names another one.
+  "panes": [
+    {
+      // The editor keeps the left 40% after the agent splits it.
+      "command": "nvim ."
+    },
+    {
+      "command": "pi",
+      // Open to the right and take 60% of the editor's width.
+      "split": "horizontal",
+      "percentage": 60,
+      // Keep keyboard focus here after every pane has opened.
+      "focus": true
+    },
+    {
+      // Arrays preserve literal arguments. Strings use shell syntax.
+      "command": [
+        "bun",
+        "run",
+        "start:bff"
+      ],
+      // Open below the agent and take 28% of its height.
+      "split": "vertical",
+      "percentage": 28
+    }
+  ],
+  "files": {
+    // Copy rules create independent files in each new worktree.
+    "copy": [],
+    // Symlink rules share files with the primary checkout. Missing sources are skipped.
+    "symlink": [
+      ".claude/settings.local.json"
+    ]
+  }
+}

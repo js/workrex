@@ -38,11 +38,12 @@ export type SplitPane = { command: string | string[]; focus: boolean; split: Spl
 export type Layout = [RootPane, ...SplitPane[]];
 export type Config = { panes: Layout; files: { copy: string[]; symlink: string[] }; main_branch?: string };
 
-function readConfig(path: string): Record<string, unknown> {
-  if (!existsSync(path)) {
+function readConfig(basePath: string): Record<string, unknown> {
+  const path = [`${basePath}.jsonc`, `${basePath}.json`].find(existsSync);
+  if (!path) {
     return {};
   }
-  return object(JSON.parse(readFileSync(path, "utf8")), path);
+  return object(Bun.JSONC.parse(readFileSync(path, "utf8")), path);
 }
 
 export function config(primary: string): Config {
@@ -50,8 +51,8 @@ export function config(primary: string): Config {
     panes: [{ command: ["nvim", "."] }, { command: ["pi"], split: "horizontal", percentage: 40, focus: true }],
     files: { copy: [], symlink: [] },
   };
-  const global = readConfig(join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "workrex/config.json"));
-  const local = readConfig(join(primary, ".workrex.json"));
+  const global = readConfig(join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "workrex/config"));
+  const local = readConfig(join(primary, ".workrex"));
   for (const layer of [global, local]) {
     keys(layer, ["panes", "files", "main_branch"], "configuration");
   }

@@ -86,7 +86,7 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
   }
 }, 30_000);
 
-real("real Rex opens nested panes in the worktree, focuses by depth-first position, and rebuilds them on reopen", async () => {
+real("real Rex opens nested panes from JSONC in the worktree, focuses by depth-first position, and rebuilds them on reopen", async () => {
   const f = fixture();
   const env = { ...f.env, PATH: process.env.PATH, WR_LUA: resolve(import.meta.dir, "../rex/wr.lua") };
   function rex(args: string[]) {
@@ -103,6 +103,9 @@ real("real Rex opens nested panes in the worktree, focuses by depth-first positi
   const editor = { id: "editor", command: pane("editor") };
   const agent = { id: "agent", command: "pwd > .wr-agent && printf 'ok-%s-agent\\n' 42", split_from: "editor", split: "horizontal", percentage: 60, focus: true };
   const bff = { command: pane("bff"), split_from: "agent", split: "vertical", percentage: 28 };
+  function configure(panes: unknown[]) {
+    f.write(join(f.primary, ".workrex.jsonc"), "// Nested pane layout\n" + JSON.stringify({ panes }));
+  }
 
   function open(branch: string) {
     const added = f.wr(["add", branch], f.primary, overrides);
@@ -134,11 +137,11 @@ real("real Rex opens nested panes in the worktree, focuses by depth-first positi
   }
 
   try {
-    f.local({ panes: [editor, agent, bff] });
+    configure([editor, agent, bff]);
     const nested = open("nested");
     await expectGoal(nested.entry.path, nested);
 
-    f.local({ panes: [editor, agent, { ...bff, split_from: "editor" }] });
+    configure([editor, agent, { ...bff, split_from: "editor" }]);
     const shared = open("shared");
     const { split } = shared.layout;
     expect(split.direction).toBe("horizontal");
@@ -150,7 +153,7 @@ real("real Rex opens nested panes in the worktree, focuses by depth-first positi
     await expectPane(shared.entry.path, split.before.split.after.block_id, "bff");
     await expectPane(shared.entry.path, split.after.block_id, "agent");
 
-    f.local({ panes: [editor, agent, bff] });
+    configure([editor, agent, bff]);
     for (const name of ["editor", "agent", "bff"]) {
       rmSync(join(nested.entry.path, `.wr-${name}`));
     }
