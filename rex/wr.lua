@@ -77,47 +77,85 @@ rex.action {
 
     local warning = nil
     if not item then
-      if #args.panes < 1 or #args.panes > 2 then
-        error("Expected one or two panes", 0)
+      if #args.panes < 1 then
+        error("Expected at least one pane", 0)
       end
 
+      local root = { pane = 1 }
       local blocks = {}
-      local focused = 1
+      local leaves = { root }
+      local focus = nil
       for i, pane in ipairs(args.panes) do
-        if type(pane.command) ~= "table" or #pane.command == 0 then
-          error("Pane command must be an argument array", 0)
-        end
-        local command = {}
-        for j, arg in ipairs(pane.command) do
-          if type(arg) ~= "string" then
-            error("Command arguments must be strings", 0)
+        local command = pane.command
+        if type(command) == "string" then
+          if command == "" or command:find("\0", 1, true) then
+            error("Pane command must be a nonempty string without NUL", 0)
           end
-          command[j] = shell_quote(arg)
+        elseif type(command) == "table" and #command > 0 then
+          local quoted = {}
+          for j, arg in ipairs(command) do
+            if type(arg) ~= "string" then
+              error("Command arguments must be strings", 0)
+            end
+            quoted[j] = shell_quote(arg)
+          end
+          command = table.concat(quoted, " ")
+        else
+          error("Pane command must be a nonempty string or argument array", 0)
         end
 
         blocks[i] = rex.layout.block {
           flavor = "com.superlogical.terminal.shell",
-          options = { cwd = args.cwd, initial_input = table.concat(command, " ") .. "\r" },
+          options = { cwd = args.cwd, initial_input = command .. "\r" },
         }
         if pane.focus then
-          focused = i
+          if focus then
+            error("Only one pane can have focus", 0)
+          end
+          focus = i
+        end
+
+        if i > 1 then
+          -- Payloads without parent come from older clients, which always split the previous pane.
+          local parent = pane.parent == nil and i - 1 or pane.parent
+          if type(parent) ~= "number" or parent % 1 ~= 0 or parent < 1 or parent >= i then
+            error("Invalid split parent", 0)
+          end
+          if pane.split ~= "horizontal" and pane.split ~= "vertical" then
+            error("Invalid split direction", 0)
+          end
+          if type(pane.percentage) ~= "number" or pane.percentage % 1 ~= 0 or pane.percentage < 1 or pane.percentage > 99 then
+            error("Invalid split percentage", 0)
+          end
+
+          local node = leaves[parent]
+          node.pane = nil
+          node.direction = pane.split
+          node.ratio = 1 - pane.percentage / 100
+          node.before = { pane = parent }
+          node.after = { pane = i }
+          leaves[parent] = node.before
+          leaves[i] = node.after
         end
       end
 
-      local layout = blocks[1]
-      if blocks[2] then
-        local pane = args.panes[2]
-        if type(pane.percentage) ~= "number" or pane.percentage < 1 or pane.percentage > 99 then
-          error("Invalid split percentage", 0)
+      -- session.new_window returns block_ids in depth-first leaf order, before then after.
+      local order = {}
+      local function build(node)
+        if node.pane then
+          order[#order + 1] = node.pane
+          return blocks[node.pane]
         end
+        local before = build(node.before)
+        local after = build(node.after)
+        return rex.layout[node.direction](node.ratio, before, after)
+      end
+      local layout = build(root)
 
-        local ratio = 1 - pane.percentage / 100
-        if pane.split == "horizontal" then
-          layout = rex.layout.horizontal(ratio, blocks[1], blocks[2])
-        elseif pane.split == "vertical" then
-          layout = rex.layout.vertical(ratio, blocks[1], blocks[2])
-        else
-          error("Invalid split direction", 0)
+      local focused = 1
+      for position, pane in ipairs(order) do
+        if pane == focus then
+          focused = position
         end
       end
 

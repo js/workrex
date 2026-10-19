@@ -21,7 +21,10 @@ test("add creates a worktree and configured tab; repeating add reuses both", () 
   expect(f.tabs()[0].cwd).toBe(path);
   expect(f.tabs()[0].label).toBe("project space/feature/login");
   expect(f.state().entries[0].label).toBeUndefined();
-  expect(f.tabs()[0].panes[1]).toEqual({ command: ["pi"], focus: true, split: "horizontal", percentage: 40 });
+  expect(f.tabs()[0].panes).toEqual([
+    { command: ["nvim", "."], focus: false },
+    { command: ["pi"], focus: true, parent: 1, split: "horizontal", percentage: 40 },
+  ]);
 
   add("feature/login");
   expect(f.tabs()).toHaveLength(1);
@@ -171,6 +174,35 @@ test("closed tabs are reopened", () => {
 
   add("reopen");
   expect(f.tabs()).toHaveLength(1);
+});
+
+test("nested panes reach Rex as one-based parents, again when a closed tab reopens", () => {
+  f.local({ panes: [
+    { id: "editor", command: ["nvim", "."] },
+    { id: "agent", command: ["pi"], split_from: "editor", split: "horizontal", percentage: 60, focus: true },
+    { command: ["bun", "run", "start:bff"], split_from: "agent", split: "vertical", percentage: 28 },
+  ] });
+  const expected = [
+    { command: ["nvim", "."], focus: false },
+    { command: ["pi"], focus: true, parent: 1, split: "horizontal", percentage: 60 },
+    { command: ["bun", "run", "start:bff"], focus: false, parent: 2, split: "vertical", percentage: 28 },
+  ];
+  const path = add("nested");
+  expect(f.tabs()[0].panes).toEqual(expected);
+
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs = [];
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+  add("nested");
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].cwd).toBe(path);
+  expect(f.tabs()[0].panes).toEqual(expected);
+});
+
+test("invalid panes fail before a worktree is created", () => {
+  f.local({ panes: [{ id: "editor", command: ["nvim"] }, { command: ["pi"], split_from: "agent" }] });
+  expect(f.wr(["add", "invalid"]).err).toContain("split_from");
+  expect(existsSync(f.path("invalid"))).toBe(false);
 });
 
 test.each(["open-after", "select-after"])("unconfirmed creation reports manual cleanup instead of recovering by title: %s", (failure) => {

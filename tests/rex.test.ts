@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { executable, fixture } from "./helpers";
 
@@ -80,6 +80,85 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
     expect(reopenedId).not.toBe(entry.windowId);
     const reopened = JSON.parse(rex(["session", "inspect", session, "--json"]));
     expect(reopened.windows.find((w: { window_id: string }) => w.window_id === reopenedId).label).toBe("project space/layout");
+  } finally {
+    rex(["kill", session]);
+    f.dispose();
+  }
+}, 30_000);
+
+real("real Rex opens nested panes in the worktree, focuses by depth-first position, and rebuilds them on reopen", async () => {
+  const f = fixture();
+  const env = { ...f.env, PATH: process.env.PATH, WR_LUA: resolve(import.meta.dir, "../rex/wr.lua") };
+  function rex(args: string[]) {
+    const result = Bun.spawnSync(["rex", ...args], { env, stdout: "pipe", stderr: "pipe" });
+    if (result.exitCode) {
+      throw new Error(result.stderr.toString());
+    }
+    return result.stdout.toString();
+  }
+
+  const session = JSON.parse(rex(["new", "wr-test-nested", "-c", f.root, "--json"])).session_id;
+  const overrides = { PATH: process.env.PATH!, WR_LUA: env.WR_LUA, REX_SESSION: session, REX_BLOCK: "" };
+  const pane = (name: string) => ["sh", "-c", `pwd > .wr-${name}; echo ok-$((6*7))-${name}`];
+  const editor = { id: "editor", command: pane("editor") };
+  const agent = { id: "agent", command: "pwd > .wr-agent && printf 'ok-%s-agent\\n' 42", split_from: "editor", split: "horizontal", percentage: 60, focus: true };
+  const bff = { command: pane("bff"), split_from: "agent", split: "vertical", percentage: 28 };
+
+  function open(branch: string) {
+    const added = f.wr(["add", branch], f.primary, overrides);
+    expect(added.err).toBe("");
+    expect(added.code).toBe(0);
+    const entry = f.state().entries.find((e: { branch: string }) => e.branch === branch);
+    const view = JSON.parse(rex(["session", "inspect", session, "--json"]));
+    const tab = view.windows.find((w: { window_id: string }) => w.window_id === entry.windowId);
+    expect(view.active_window_id).toBe(entry.windowId);
+    return { entry, tab, layout: tab.layers[0].layout };
+  }
+
+  async function expectPane(path: string, block: string, name: string) {
+    await waitUntil(() => existsSync(join(path, `.wr-${name}`)));
+    expect(readFileSync(join(path, `.wr-${name}`), "utf8").trim()).toBe(path);
+    await waitUntil(() => rex(["capture", "-s", session, "-b", block, "--trim"]).includes(`ok-42-${name}`));
+  }
+
+  async function expectGoal(path: string, { tab, layout }: ReturnType<typeof open>) {
+    const { split } = layout;
+    expect(split.direction).toBe("horizontal");
+    expect(split.ratio).toBeCloseTo(0.4);
+    expect(split.after.split.direction).toBe("vertical");
+    expect(split.after.split.ratio).toBeCloseTo(0.72);
+    expect(tab.focused_block_id).toBe(split.after.split.before.block_id);
+    await expectPane(path, split.before.block_id, "editor");
+    await expectPane(path, split.after.split.before.block_id, "agent");
+    await expectPane(path, split.after.split.after.block_id, "bff");
+  }
+
+  try {
+    f.local({ panes: [editor, agent, bff] });
+    const nested = open("nested");
+    await expectGoal(nested.entry.path, nested);
+
+    f.local({ panes: [editor, agent, { ...bff, split_from: "editor" }] });
+    const shared = open("shared");
+    const { split } = shared.layout;
+    expect(split.direction).toBe("horizontal");
+    expect(split.ratio).toBeCloseTo(0.4);
+    expect(split.before.split.direction).toBe("vertical");
+    expect(split.before.split.ratio).toBeCloseTo(0.72);
+    expect(shared.tab.focused_block_id).toBe(split.after.block_id);
+    await expectPane(shared.entry.path, split.before.split.before.block_id, "editor");
+    await expectPane(shared.entry.path, split.before.split.after.block_id, "bff");
+    await expectPane(shared.entry.path, split.after.block_id, "agent");
+
+    f.local({ panes: [editor, agent, bff] });
+    for (const name of ["editor", "agent", "bff"]) {
+      rmSync(join(nested.entry.path, `.wr-${name}`));
+    }
+    rex(["window", "close", "-s", session, nested.entry.windowId]);
+    const reopened = open("nested");
+    expect(reopened.entry.windowId).not.toBe(nested.entry.windowId);
+    await expectGoal(nested.entry.path, reopened);
+    console.log(JSON.stringify({ nested: nested.layout, shared: shared.layout }));
   } finally {
     rex(["kill", session]);
     f.dispose();
