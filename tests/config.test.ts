@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { config } from "../src/config";
 
 let root: string;
@@ -58,8 +58,74 @@ test("one pane can be split more than once", () => {
 });
 
 test("the example config nests a third pane under the focused agent", () => {
-  const example = JSON.parse(readFileSync(join(import.meta.dir, "../examples/config.json"), "utf8"));
-  expect(panes(example.panes).map((pane) => [pane.split?.from, pane.focus])).toEqual([[undefined, false], [0, true], [1, false]]);
+  writeFileSync(join(root, ".workrex.jsonc"), readFileSync(join(import.meta.dir, "../examples/config.jsonc")));
+  expect(config(root).panes.map((pane) => [pane.split?.from, pane.focus])).toEqual([[undefined, false], [0, true], [1, false]]);
+});
+
+test.each([
+  ["global", "jsonc"], ["project", "jsonc"], ["global", "json"], ["project", "json"],
+])("%s .%s config accepts comments and trailing commas without altering strings", (scope, extension) => {
+  const path = scope === "global" ? join(root, `config/workrex/config.${extension}`) : join(root, `.workrex.${extension}`);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, String.raw`// A comment before the object.
+  {
+    /* Comments can span
+       multiple lines. */
+    "panes": [
+      { "command": ["printf", "https://example.test/a//b", "/* literal */", "C:\\files",], },
+    ],
+    "files": { "copy": [".env",], }, // Keep the trailing commas.
+  } // A comment after the object.
+  `);
+  expect(config(root)).toMatchObject({
+    panes: [{ command: ["printf", "https://example.test/a//b", "/* literal */", "C:\\files"], focus: false }],
+    files: { copy: [".env"], symlink: [] },
+  });
+});
+
+test.each(["global", "project"])("%s JSONC takes precedence over JSON without merging the two", (scope) => {
+  const base = scope === "global" ? join(root, "config/workrex/config") : join(root, ".workrex");
+  mkdirSync(dirname(base), { recursive: true });
+  writeFileSync(base + ".json", JSON.stringify({ panes: [{ command: "legacy" }], files: { copy: ["old.env"] } }));
+  writeFileSync(base + ".jsonc", '{ /* preferred */ "panes": [{ "command": "preferred" }], }');
+  expect(config(root)).toMatchObject({ panes: [{ command: "preferred" }], files: { copy: [], symlink: [] } });
+
+  writeFileSync(base + ".jsonc", '{ /* invalid */ "panes": }');
+  expect(() => config(root)).toThrow(SyntaxError);
+});
+
+test.each(["jsonc", "json"])("commented project .%s config still overrides and inherits global JSONC settings", (extension) => {
+  mkdirSync(join(root, "config/workrex"), { recursive: true });
+  writeFileSync(join(root, "config/workrex/config.jsonc"), `{
+    // Shared settings.
+    "panes": [{ "command": "pi" }],
+    "files": { "copy": [".env"], "symlink": ["node_modules"] },
+    "main_branch": "main",
+  }`);
+  writeFileSync(join(root, `.workrex.${extension}`), `{
+    /* Keep the global panes and copy rules. */
+    "files": { "symlink": [], },
+    "main_branch": "develop",
+  }`);
+  expect(config(root)).toEqual({
+    panes: [{ command: "pi", focus: false }],
+    files: { copy: [".env"], symlink: [] },
+    main_branch: "develop",
+  });
+});
+
+test.each([
+  ["a missing value", '{ "panes": /* missing */ }'],
+  ["an unterminated object", '{ "panes": [] // missing closing brace'],
+  ["unquoted keys", '{ panes: [] }'],
+])("JSONC rejects %s", (_, contents) => {
+  writeFileSync(join(root, ".workrex.jsonc"), contents);
+  expect(() => config(root)).toThrow(SyntaxError);
+});
+
+test("comments do not bypass config validation", () => {
+  writeFileSync(join(root, ".workrex.jsonc"), '{ /* unsupported */ "hooks": [] }');
+  expect(() => config(root)).toThrow("Unknown configuration setting: hooks");
 });
 
 test.each([
