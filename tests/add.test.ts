@@ -208,7 +208,8 @@ test("invalid panes fail before a worktree is created", () => {
 test.each(["open-after", "select-after"])("unconfirmed creation reports manual cleanup instead of recovering by title: %s", (failure) => {
   const result = f.wr(["add", "unconfirmed"], f.primary, { WR_FAKE_FAIL: failure });
   expect(result.code).toBe(1);
-  expect(result.err).toContain("close that tab manually before retrying wr add");
+  expect(result.err).toContain("close that tab manually before retrying.");
+  expect(result.err).not.toContain("wr add");
   expect(f.state().entries[0].windowId).toBeNull();
   const orphan = f.tabs()[0];
   expect(f.wr(["ls"]).out).toContain("unconfirmed\tclosed\tready");

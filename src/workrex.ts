@@ -36,38 +36,44 @@ function installFiles(primary: string, destination: string, rules: FileRule[]) {
   }
 }
 
+function show(repo: Repo, entry: Entry) {
+  const cfg = config(repo.primary);
+  if (entry.phase === "creating" || entry.phase === "removing") {
+    throw new Error(
+      `${entry.branch} has unfinished ${entry.phase} work. Inspect its registration before retrying. ` +
+        "A failed file-copy step can be abandoned with wr rm and --force.",
+    );
+  }
+  repo.verify(entry);
+
+  const status = inspectTab(entry);
+  if (!status.sessionExists) {
+    entry.sessionId = currentSession();
+    entry.windowId = null;
+    repo.save();
+  }
+  entry.windowId = openTab(entry, cfg.panes, `${basename(repo.primary)}/${entry.branch}`);
+  repo.save();
+  console.log(`${entry.branch}\t${entry.path}\topen`);
+}
+
 export function add(repo: Repo, name: string, source?: string) {
   validateBranch(repo.primary, name);
-  const cfg = config(repo.primary);
-  const label = `${basename(repo.primary)}/${name}`;
 
   const existing = repo.entries.find((entry) => entry.branch === name);
   if (existing) {
     if (source !== undefined) {
       throw new Error("--branch cannot be used with an existing wr worktree");
     }
-    if (existing.phase !== "ready") {
-      throw new Error(
-        `${name} has unfinished ${existing.phase} work. Inspect its registration before retrying. ` +
-          "A failed file-copy step can be abandoned with wr rm and --force.",
-      );
-    }
-    repo.verify(existing);
-
-    const status = inspectTab(existing);
-    if (!status.sessionExists) {
-      existing.sessionId = currentSession();
-      existing.windowId = null;
-      repo.save();
-    }
-    existing.windowId = openTab(existing, cfg.panes, label);
-    repo.save();
-    console.log(`${name}\t${existing.path}\topen`);
+    show(repo, existing);
     return;
   }
 
+  const cfg = config(repo.primary);
+  const label = `${basename(repo.primary)}/${name}`;
+
   if (worktrees(repo.primary).some((wt) => wt.branch === name)) {
-    throw new Error(`Branch ${name} is already in an unmanaged worktree`);
+    throw new Error(`Branch ${name} is already in an unmanaged worktree. Open it with wr open ${name}`);
   }
   const path = worktreePath(repo.primary, name);
   if (present(path) || repo.entries.some((entry) => entry.path === path)) {
@@ -135,9 +141,43 @@ export function add(repo: Repo, name: string, source?: string) {
   console.log(`${name}\t${path}\topen`);
 }
 
+export function open(repo: Repo, name: string) {
+  const existing = repo.entries.find((entry) => entry.branch === name);
+  if (existing) {
+    show(repo, existing);
+    return;
+  }
+
+  const wt = worktrees(repo.primary).find((item) => item.branch === name);
+  if (!wt) {
+    throw new Error(`No worktree has branch ${name}. Create one with wr add ${name}`);
+  }
+  if (!present(wt.path)) {
+    throw new Error(`Worktree is missing: ${wt.path}`);
+  }
+  const owner = repo.entries.find((entry) => entry.path === wt.path);
+  if (owner) {
+    throw new Error(`${wt.path} is already registered as ${owner.branch}`);
+  }
+
+  const entry: Entry = {
+    branch: name,
+    path: wt.path,
+    gitDir: realpathSync(git(wt.path, ["rev-parse", "--absolute-git-dir"]).out.trim()),
+    identity: identity(wt.path),
+    sessionId: currentSession(),
+    windowId: null,
+    phase: "external",
+    expectedHead: null,
+    force: false,
+  };
+  repo.entries.push(entry);
+  show(repo, entry);
+}
+
 function currentSession(): string {
   if (!process.env.REX_SESSION) {
-    throw new Error("Run wr add inside a Rex session, or set REX_SESSION to its full ID");
+    throw new Error("Run wr inside a Rex session, or set REX_SESSION to its full ID");
   }
   return process.env.REX_SESSION;
 }

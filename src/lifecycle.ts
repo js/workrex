@@ -7,6 +7,11 @@ import { closeTab, inspectTab } from "./rex";
 
 export function merge(repo: Repo, name: string, into: string | undefined, force: boolean): boolean {
   const entry = repo.entry(name);
+  if (entry.phase === "external") {
+    throw new Error(
+      `wr did not create ${name}, so it will not merge or delete it. Merge with Git, then run wr rm ${name} to close its tab.`,
+    );
+  }
   if (entry.phase === "removing") {
     return finishRemoval(repo, entry);
   }
@@ -93,6 +98,9 @@ export function merge(repo: Repo, name: string, into: string | undefined, force:
 
 export function remove(repo: Repo, name: string, force: boolean): boolean {
   const entry = repo.entry(name);
+  if (entry.phase === "external") {
+    return untrack(repo, entry, `Closed ${entry.branch}. wr did not create this worktree, so it and its branch remain.`);
+  }
   if (entry.phase === "removing") {
     return finishRemoval(repo, entry);
   }
@@ -156,6 +164,10 @@ function finishRemoval(repo: Repo, entry: Entry): boolean {
     git(repo.primary, ["update-ref", "-d", `refs/heads/${entry.branch}`, expected]);
   }
 
+  return untrack(repo, entry, `Removed ${entry.branch}.`);
+}
+
+function untrack(repo: Repo, entry: Entry, done: string): boolean {
   const status = inspectTab(entry);
   if (status.ownTab) {
     return true;
@@ -163,7 +175,7 @@ function finishRemoval(repo: Repo, entry: Entry): boolean {
   closeTab(entry);
   repo.entries = repo.entries.filter((item) => item !== entry);
   repo.save();
-  console.log(`Removed ${entry.branch}.`);
+  console.log(done);
   return false;
 }
 
@@ -182,7 +194,7 @@ export function deferTabCleanup(repo: Repo, name: string) {
     });
     child.unref();
     console.log(
-      "Git cleanup complete. Closing this tab in the background. " +
+      "Closing this tab in the background. " +
         `If it stays open, retry wr rm with the same name. Log: ${log}`,
     );
   } finally {

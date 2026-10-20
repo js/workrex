@@ -31,7 +31,7 @@ rex config reload
 wr --help
 ```
 
-Run `add` inside a Rex terminal so it can use `REX_SESSION`. Other commands find tabs through the repo's registry. Rex must be reachable for tab operations. For automatic tab switching, enable Remote Control under Rex Server in Rex's Settings.
+Run `add` or `open` inside a Rex terminal so they can use `REX_SESSION`. Other commands find tabs through the repo's registry. Rex must be reachable for tab operations. For automatic tab switching, enable Remote Control under Rex Server in Rex's Settings.
 
 ## Agent skill
 
@@ -51,16 +51,21 @@ Inspect any existing skill at that path before replacing it. The symlink keeps t
 ```sh
 wr add fix-login
 wr add fix-settings --branch develop
+wr open old-fix
 wr ls
 ```
 
 New branches start at the invoking checkout's HEAD unless you pass `--branch`. Existing branches keep their commits. `--branch` cannot reset them.
 
-Worktrees live beside the primary checkout in `<repo>__worktrees/`. Branch names become directory names, with `feature/login` encoded as `feature%2Flogin`.
+Worktrees created with `add` live beside the primary checkout in `<repo>__worktrees/`. Branch names become directory names, with `feature/login` encoded as `feature%2Flogin`.
 
 Tabs are named `<repo>/<branch>`. `wr` tracks them by their Rex window IDs, so you can rename them.
 
-Repeat `add` to focus an open tab or reopen a closed one. It does not reapply file rules or recreate missing worktrees. `wr` refuses to adopt worktrees it did not create.
+Repeat `add` or `open` to focus an open tab or reopen a closed one. Neither command reapplies file rules or recreates a missing worktree.
+
+`open` takes the branch name of an existing linked worktree, not a path. It uses the merged global and primary-checkout project config. It does not create a worktree or apply copy and symlink rules. Configured pane commands run in the worktree as usual.
+
+Worktrees created outside `wr` are listed as `external`. For these, `wr rm` only closes the tab and forgets the entry, even with `--force`. The worktree and branch remain. `wr merge` refuses external worktrees.
 
 `ls`, also spelled `list`, shows this repo's registered worktrees, including closed tabs and missing directories.
 
@@ -208,7 +213,7 @@ wr merge fix-settings --into develop
 wr rm abandoned-work
 ```
 
-`merge` rebases the source branch onto the target, fast-forwards the target, then removes the source worktree, branch, and tab. A dirty target checkout blocks the merge. If the target has no checkout, `wr` updates its ref without switching branches in the primary checkout. The starting branch passed to `add --branch` does not change the merge target.
+For worktrees created with `wr add`, `merge` rebases the source branch onto the target, fast-forwards the target, then removes the source worktree, branch, and tab. A dirty target checkout blocks the merge. If the target has no checkout, `wr` updates its ref without switching branches in the primary checkout. The starting branch passed to `add --branch` does not change the merge target.
 
 `rm` removes the worktree, branch, and tab without merging. It refuses dirty work or commits not merged into the default branch unless you pass `--force`.
 
@@ -223,17 +228,17 @@ wr rm abandoned-work --force
 - `rm --force` abandons the whole worktree, including ignored files and an unfinished rebase or merge.
 - `merge --force` still refuses dirty targets and unfinished Git operations.
 
-Commands finish Git cleanup before closing their own tab in the background.
+For a worktree that `wr` created, commands finish Git cleanup before closing their own tab in the background. `rm` of an external worktree only closes the tab.
 
 ## Recovery
 
 A rebase conflict leaves the worktree and tab open. Resolve and stage the changes in that worktree. Run `git rebase --continue`, or abort with `git rebase --abort`. Retry `wr merge <branch>` afterward. Finish or abort any Git operation before retrying a merge.
 
-If `add` fails or is interrupted while opening a tab, inspect Rex before retrying. A tab may have opened without its window ID being saved. Close that tab manually, then retry `add` to reuse the worktree. `wr` does not find tabs by title.
+If `add` or `open` fails or is interrupted while opening a tab, inspect Rex before retrying. A tab may have opened without its window ID being saved. Close that tab manually, then retry the same command. `wr` does not find tabs by title.
 
 If file setup fails, the entry stays `creating`. Inspect it, then use `wr rm <branch> --force` to abandon it before starting again.
 
-If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <branch>`. Background errors go to `cleanup.log` beside the registry.
+If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <branch>`. If closing an external tab fails, the entry stays `external`, and the same retry closes it. Background errors go to `cleanup.log` beside the registry.
 
 The shared Git directory contains `workrex/state.json` and `workrex/lock`. The lock prevents concurrent `wr` changes. If a killed process leaves it behind, read `workrex/lock/owner.json` and confirm the process has stopped before removing the lock directory. Never remove a live process's lock.
 

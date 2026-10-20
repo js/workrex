@@ -23,7 +23,7 @@ export type Entry = {
   identity: string | null;
   sessionId: string;
   windowId: string | null;
-  phase: "creating" | "ready" | "removing";
+  phase: "creating" | "ready" | "removing" | "external";
   expectedHead: string | null;
   force: boolean;
 };
@@ -54,7 +54,7 @@ function nullableText(value: unknown, label: string): string | null {
 function parseEntry(value: unknown): Entry {
   const entry = object(value, "registry entry");
   const phase = entry.phase;
-  if (phase !== "creating" && phase !== "ready" && phase !== "removing") {
+  if (phase !== "creating" && phase !== "ready" && phase !== "removing" && phase !== "external") {
     throw new Error("Invalid registry phase");
   }
   if (typeof entry.force !== "boolean") {

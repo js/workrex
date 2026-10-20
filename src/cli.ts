@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { Repo } from "./repo";
 import { checkConfig } from "./config";
-import { add, list } from "./workrex";
+import { add, list, open } from "./workrex";
 import { deferTabCleanup, merge, remove } from "./lifecycle";
 
 export async function run(args: string[]) {
@@ -13,6 +13,7 @@ export async function run(args: string[]) {
   if (!args.length || args[0] === "--help" || args[0] === "-h") {
     console.log(
       "Usage: wr add <name> [--branch <source>]\n" +
+        "       wr open <name>\n" +
         "       wr merge <name> [--into <target>] [--force]\n" +
         "       wr rm <name> [--force]\n" +
         "       wr ls\n" +
@@ -46,6 +47,25 @@ export async function run(args: string[]) {
 
     const repo = new Repo(process.cwd());
     repo.locked(() => add(repo, parsed.positionals[0], parsed.values.branch));
+  } else if (command === "open") {
+    let name: string;
+    try {
+      const parsed = parseArgs({
+        args: args.slice(1),
+        options: {},
+        allowPositionals: true,
+        strict: true,
+      });
+      if (parsed.positionals.length !== 1) {
+        throw new Error("Usage: wr open <name>");
+      }
+      name = parsed.positionals[0];
+    } catch {
+      throw new Error("Usage: wr open <name>");
+    }
+
+    const repo = new Repo(process.cwd());
+    repo.locked(() => open(repo, name));
   } else if (command === "merge") {
     const parsed = parseArgs({
       args: args.slice(1),

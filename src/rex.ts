@@ -61,7 +61,7 @@ export function openTab(entry: Entry, panes: Layout, label: string): string {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `${message}\nRex did not confirm the tab. If it created a new tab, close that tab manually before retrying wr add.`,
+      `${message}\nRex did not confirm the tab. If it created a new tab, close that tab manually before retrying.`,
     );
   }
 }
