@@ -57,6 +57,7 @@ test("open registers an existing worktree and builds panes from project config",
     { command: ["project-two"], focus: true, parent: 1, split: "horizontal", percentage: 30 },
   ]);
   expect(f.state().entries[0].phase).toBe("external");
+  expect(f.state().entries[0]).not.toHaveProperty("identity");
   expect(f.wr(["ls"]).out).toContain(`ext\topen\texternal\t${path}`);
 });
 
@@ -349,7 +350,6 @@ test("open reopens a switched managed worktree by its registered name without mo
   expect(reopened.phase).toBe("ready");
   expect(reopened.path).toBe(entry.path);
   expect(reopened.gitDir).toBe(entry.gitDir);
-  expect(reopened.identity).toBe(entry.identity);
   expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
   expect(f.git(["branch", "--show-current"], path)).toBe("fix/apple-pay-cancellation");
   expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("dirty tracked\n");
@@ -372,26 +372,37 @@ test("open reopens a switched managed worktree by its registered name without mo
   expect(f.tabs()).toHaveLength(1);
 });
 
-test("open refuses a worktree whose directory identity changed", () => {
+test.each(["stale", "absent"])("open accepts a v1 registration with %s identity and saves without it", (identity) => {
   expect(f.wr(["add", "feature"]).code).toBe(0);
   const path = f.path("feature");
   const state = f.state();
-  state.entries[0].identity = "replaced";
+  if (identity === "stale") {
+    state.entries[0].identity = "16777230:12345";
+  } else {
+    delete state.entries[0].identity;
+  }
   writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
-  const before = f.state().entries;
   const head = f.git(["rev-parse", "HEAD"], path);
-  f.write(join(path, "tracked.txt"), "keep\n");
+  const windowId = f.tabs()[0].window_id;
+  f.write(join(path, "tracked.txt"), "keep tracked\n");
+  f.write(join(path, "untracked.txt"), "keep untracked\n");
 
   const result = f.wr(["open", "feature"]);
 
-  expect(result.code).toBe(1);
-  expect(result.err).toContain(`Worktree identity changed: ${path}`);
-  expect(f.state().entries).toEqual(before);
+  expect(result.err).toBe("");
+  expect(result.code).toBe(0);
+  expect(result.out).toBe(`feature\t${path}\topen\n`);
+  delete state.entries[0].identity;
+  expect(f.state()).toEqual(state);
+  expect(f.state().version).toBe(1);
+  expect(f.state().entries[0]).not.toHaveProperty("identity");
   expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
   expect(f.git(["branch", "--show-current"], path)).toBe("feature");
-  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep\n");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("keep untracked\n");
   expect(f.tabs()).toHaveLength(1);
-  expect(existsSync(path)).toBe(true);
+  expect(f.tabs()[0].window_id).toBe(windowId);
+  expect(f.tabs()[0].cwd).toBe(path);
 });
 
 test("unconfirmed open tells you to close the tab manually", () => {

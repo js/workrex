@@ -21,6 +21,7 @@ test("add creates a worktree and configured tab; repeating add reuses both", () 
   expect(f.tabs()[0].cwd).toBe(path);
   expect(f.tabs()[0].label).toBe("project space/feature/login");
   expect(f.state().entries[0].label).toBeUndefined();
+  expect(f.state().entries[0]).not.toHaveProperty("identity");
   expect(f.tabs()[0].panes).toEqual([
     { command: ["nvim", "."], focus: false },
     { command: ["pi"], focus: true, parent: 1, split: "horizontal", percentage: 40 },

@@ -242,6 +242,8 @@ If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm
 
 The shared Git directory contains `workrex/state.json` and `workrex/lock`. The lock prevents concurrent `wr` changes. If a killed process leaves it behind, read `workrex/lock/owner.json` and confirm the process has stopped before removing the lock directory. Never remove a live process's lock.
 
+Registrations use full worktree and Git directory paths. A directory recreated at the same paths keeps its registration. `wr` ignores legacy device/inode identities and drops them on the next registry save.
+
 ## Develop
 
 ```sh

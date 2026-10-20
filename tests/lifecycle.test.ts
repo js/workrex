@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fixture } from "./helpers";
 
@@ -269,15 +269,72 @@ test("merge and rm always require explicit names, even inside their worktree", (
   expect(f.wr(["rm", "main", "--force"]).code).toBe(1);
 });
 
-test("replaced or switched worktrees cannot be deleted using a stale registration", () => {
+test.each(["merge", "rm"])("%s refuses a switched branch before changing data", (action) => {
   const path = add();
   f.git(["switch", "-c", "different"], path);
-  expect(f.wr(["rm", "feature", "--force"]).err).toContain("no longer has branch");
-  expect(existsSync(path)).toBe(true);
-
-  f.git(["switch", "feature"], path);
+  f.write(join(path, "tracked.txt"), "keep tracked\n");
+  f.write(join(path, "untracked.txt"), "keep untracked\n");
   const state = f.state();
-  state.entries[0].identity = "replaced";
+  const tabs = f.tabs();
+  const head = f.git(["rev-parse", "HEAD"], path);
+
+  const result = f.wr([action, "feature", "--force"]);
+
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("no longer has branch");
+  expect(f.state()).toEqual(state);
+  expect(f.tabs()).toEqual(tabs);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["rev-parse", "feature"])).toBe(head);
+  expect(f.git(["rev-parse", "main"])).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("different");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("keep untracked\n");
+});
+
+test.each(["open", "merge", "rm"])("%s refuses a mismatched Git directory before changing data", (action) => {
+  const path = add();
+  const state = f.state();
+  state.entries[0].gitDir = join(f.primary, ".git/worktrees/other");
   writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
-  expect(f.wr(["rm", "feature", "--force"]).err).toContain("identity changed");
+  f.write(join(path, "tracked.txt"), "keep tracked\n");
+  f.write(join(path, "untracked.txt"), "keep untracked\n");
+  const tabs = f.tabs();
+  const head = f.git(["rev-parse", "HEAD"], path);
+
+  const result = f.wr([action, "feature", ...(action === "open" ? [] : ["--force"])]);
+
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("Worktree ownership changed");
+  expect(f.state()).toEqual(state);
+  expect(f.tabs()).toEqual(tabs);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["rev-parse", "feature"])).toBe(head);
+  expect(f.git(["rev-parse", "main"])).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("feature");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("keep untracked\n");
+});
+
+test("open accepts a directory recreated at the same full worktree path", () => {
+  const path = add();
+  f.write(join(path, "tracked.txt"), "keep tracked\n");
+  f.write(join(path, "untracked.txt"), "keep untracked\n");
+  const state = f.state();
+  const tabs = f.tabs();
+  const head = f.git(["rev-parse", "HEAD"], path);
+  const original = join(f.root, "original");
+  renameSync(path, original);
+  cpSync(original, path, { recursive: true });
+
+  const result = ok(["open", "feature"]);
+
+  expect(result.out).toBe(`feature\t${path}\topen\n`);
+  expect(f.state()).toEqual(state);
+  expect(f.state().entries[0]).not.toHaveProperty("identity");
+  expect(f.tabs()).toEqual(tabs);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("feature");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("keep untracked\n");
 });

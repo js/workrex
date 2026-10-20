@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { object, present, text } from "./config";
 
@@ -20,7 +20,6 @@ export type Entry = {
   branch: string;
   path: string;
   gitDir: string | null;
-  identity: string | null;
   sessionId: string;
   windowId: string | null;
   phase: "creating" | "ready" | "removing" | "external";
@@ -65,7 +64,6 @@ function parseEntry(value: unknown): Entry {
     branch: text(entry.branch, "branch"),
     path: text(entry.path, "path"),
     gitDir: nullableText(entry.gitDir, "gitDir"),
-    identity: nullableText(entry.identity, "identity"),
     sessionId: text(entry.sessionId, "sessionId"),
     windowId: nullableText(entry.windowId, "windowId"),
     phase,
@@ -191,9 +189,6 @@ export class Repo {
     if (realpathSync(entry.path) === this.primary || wt.locked) {
       throw new Error(`Refusing protected or locked worktree: ${entry.path}`);
     }
-    if (!entry.gitDir || !entry.identity || identity(entry.path) !== entry.identity) {
-      throw new Error(`Worktree identity changed: ${entry.path}`);
-    }
 
     const gitDir = realpathSync(git(entry.path, ["rev-parse", "--absolute-git-dir"]).out.trim());
     const common = realpathSync(git(entry.path, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out.trim());
@@ -221,11 +216,6 @@ export function validateBranch(cwd: string, name: string) {
   ) {
     throw new Error(`Invalid branch name: ${JSON.stringify(name)}`);
   }
-}
-
-export function identity(path: string): string {
-  const stat = statSync(path);
-  return `${stat.dev}:${stat.ino}`;
 }
 
 export function dirty(path: string): boolean {

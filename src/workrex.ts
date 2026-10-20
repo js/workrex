@@ -1,7 +1,7 @@
 import { constants, cpSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { config, fileRules, inside, present, type FileRule } from "./config";
-import { git, identity, Repo, validateBranch, worktreePath, worktrees, type Entry } from "./repo";
+import { git, Repo, validateBranch, worktreePath, worktrees, type Entry } from "./repo";
 import { inspectTab, openTab } from "./rex";
 
 function installFiles(primary: string, destination: string, rules: FileRule[]) {
@@ -98,7 +98,6 @@ export function add(repo: Repo, name: string, source?: string) {
     branch: name,
     path,
     gitDir: null,
-    identity: null,
     sessionId: currentSession(),
     windowId: null,
     phase: "creating",
@@ -129,7 +128,6 @@ export function add(repo: Repo, name: string, source?: string) {
   }
 
   entry.gitDir = realpathSync(git(path, ["rev-parse", "--absolute-git-dir"]).out.trim());
-  entry.identity = identity(path);
   repo.save();
 
   installFiles(repo.primary, path, rules);
@@ -164,7 +162,6 @@ export function open(repo: Repo, name: string) {
     branch: name,
     path: wt.path,
     gitDir: realpathSync(git(wt.path, ["rev-parse", "--absolute-git-dir"]).out.trim()),
-    identity: identity(wt.path),
     sessionId: currentSession(),
     windowId: null,
     phase: "external",

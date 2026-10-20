@@ -38,7 +38,7 @@ Start with `wr ls`, `git worktree list --porcelain`, and the affected worktree's
 | Entry is `creating` after failed file setup | Inspect existing files and the error. With explicit authorization to abandon that worktree, use `wr rm <name> --force`, then fix config and recreate. Repeating `add` will not finish file setup. |
 | Entry is `removing` after Git cleanup | Retry `wr rm <name>` to finish tab/registry cleanup. It resumes removal; force is not needed merely to close the tab. |
 | Entry is `external` after failed or deferred tab closure | Retry `wr rm <name>` to close the tab and forget the entry. The worktree and branch remain, including when the directory is missing. |
-| Entry is `missing` | Inspect Git registration and stored path/identity. `add` will not recreate it. Preserve the registration until ownership and a recovery plan are clear. |
+| Entry is `missing` | Inspect Git registration and the stored worktree and Git directory paths. `add` will not recreate it. Preserve the registration until ownership and a recovery plan are clear. |
 | Lock remains after interruption | Read the lock owner and confirm that process has stopped before removing only the stale lock directory. Preserve locks held by live processes. |
 
 Locate shared state from any worktree with:
@@ -47,4 +47,4 @@ Locate shared state from any worktree with:
 git rev-parse --path-format=absolute --git-common-dir
 ```
 
-Under that directory, Workrex uses `workrex/state.json`, `workrex/lock/owner.json`, and `workrex/cleanup.log`. The log records deferred tab-cleanup failures. These are runtime bookkeeping, not configuration. Prefer the supported retry commands; hand-editing the registry or deleting owned paths bypasses identity and commit-safety checks.
+Under that directory, Workrex uses `workrex/state.json`, `workrex/lock/owner.json`, and `workrex/cleanup.log`. The log records deferred tab-cleanup failures. These are runtime bookkeeping, not configuration. Prefer the supported retry commands; hand-editing the registry or deleting owned paths bypasses ownership and commit-safety checks.
