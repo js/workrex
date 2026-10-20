@@ -12,12 +12,22 @@ export async function run(args: string[]) {
 
   if (!args.length || args[0] === "--help" || args[0] === "-h") {
     console.log(
-      "Usage: wr add <name> [--branch <source>]\n" +
-        "       wr open <name>\n" +
-        "       wr merge <name> [--into <target>] [--force]\n" +
-        "       wr rm <name> [--force]\n" +
-        "       wr ls\n" +
-        "       wr config check",
+      "Usage: wr <command>\n\n" +
+        "  wr add <name> [--branch <source>]\n" +
+        "    Create a worktree and open its Rex tab, or reopen a registered one.\n" +
+        "    New branches start at HEAD unless --branch is given.\n\n" +
+        "  wr open <name>\n" +
+        "    Focus or reopen a Rex tab for an existing worktree, including one created outside wr.\n\n" +
+        "  wr merge <name> [--into <target>] [--force]\n" +
+        "    Rebase onto the default branch or --into target, fast-forward it, then remove\n" +
+        "    the worktree, branch, and tab. --force discards uncommitted source changes.\n\n" +
+        "  wr rm <name> [--force]\n" +
+        "    Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.\n" +
+        "    For worktrees created outside wr, only close and unregister the tab.\n\n" +
+        "  wr ls\n" +
+        "    List this repo's registered worktrees with their paths, tab status, and state.\n\n" +
+        "  wr config check\n" +
+        "    Check global and current-directory .jsonc files for syntax errors, not settings validity.",
     );
     return;
   }
