@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 type Options = {
   failSelection?: boolean;
+  missingSession?: boolean;
   command?: string | string[];
   windows?: { window_id: string; label: string }[];
   panes?: Record<string, unknown>[];
@@ -10,7 +11,7 @@ type Options = {
 };
 
 function run(existing: boolean, options: Options = {}) {
-  const args = { module: resolve(import.meta.dir, "../rex/wr.lua"), existing, fail_selection: options.failSelection,
+  const args = { module: resolve(import.meta.dir, "../rex/wr.lua"), existing, fail_selection: options.failSelection, missing_session: options.missingSession,
     command: options.command, windows: options.windows, panes: options.panes, block_ids: options.blockIds };
   const result = Bun.spawnSync(
     ["rex", "do", resolve(import.meta.dir, "lua-open.lua"), "--args", JSON.stringify(args), "--json"],
@@ -49,6 +50,13 @@ test.each([false, true])("wr_open selects the app tab, existing=%s", (existing) 
     expect(result.layout.split.direction).toBe("horizontal");
     expect(result.layout.split.ratio).toBeCloseTo(0.6);
   }
+});
+
+test.each([false, true])("wr_open reports a missing session before attachment, existing=%s", (existing) => {
+  const result = run(existing, { missingSession: true });
+  expect(result.error).toBe("Rex session no longer exists. Run add from a live Rex session.");
+  expect(result.opened).toBe(0);
+  expect(result.selected).toBeUndefined();
 });
 
 test("a pane can split an earlier split pane, nesting the layout", () => {

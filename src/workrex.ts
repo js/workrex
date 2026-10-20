@@ -47,10 +47,9 @@ function show(repo: Repo, entry: Entry) {
   repo.verifyWorktree(entry);
 
   const status = inspectTab(entry);
-  if (!status.sessionExists) {
+  if (!status.windowId) {
     entry.sessionId = currentSession();
     entry.windowId = null;
-    repo.save();
   }
   entry.windowId = openTab(entry, cfg.panes, `${basename(repo.primary)}/${entry.branch}`);
   repo.save();

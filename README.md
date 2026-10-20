@@ -61,7 +61,7 @@ Worktrees created with `add` live beside the primary checkout in `<repo>__worktr
 
 Tabs are named `<repo>/<branch>`. `wr` tracks them by their Rex window IDs, so you can rename them.
 
-Repeat `add` or `open` to focus an open tab or reopen a closed one. Neither command reapplies file rules or recreates a missing worktree.
+Repeat `add` or `open` to focus an existing tab, even in another Rex session. If the saved tab or session is gone, `wr` creates a new tab in your current session and saves its IDs after Rex confirms it. Neither command reapplies file rules or recreates a missing worktree.
 
 `open` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree. It does not take a path. Registered names keep working after you switch branches inside the worktree. Opening does not update the registered branch, and `merge` and `rm` still refuse a managed worktree whose branch changed. It uses the merged global and primary-checkout project config. It does not create a worktree or apply copy and symlink rules. Configured pane commands run in the worktree as usual.
 

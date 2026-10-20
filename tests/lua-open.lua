@@ -4,6 +4,7 @@ local actions = {}
 local selected = nil
 local focused = nil
 local opened = 0
+local attached = false
 local created_layout = nil
 local created_label = nil
 local label = "workrex/test"
@@ -16,10 +17,19 @@ rex = {
   end,
   call = function(method, args)
     if method == "session.list" then
-      return { sessions = { { session_id = "session:test" } } }
+      return { sessions = options.missing_session and {} or { { session_id = "session:test" } } }
     end
-    if method == "session.view" then
-      return { windows = options.windows or (options.existing and { { window_id = window_id, label = label } } or {}) }
+    if method == "session.attach" then
+      if options.missing_session or args.session_id ~= "session:test" then
+        return nil, "Cannot attach missing session"
+      end
+      attached = true
+      return { client_id = "client:test", view = {
+        windows = options.windows or (options.existing and { { window_id = window_id, label = label } } or {}),
+      } }
+    end
+    if not attached then
+      return nil, "stream is not attached to session " .. args.session_id
     end
     if method == "session.new_window" then
       opened = opened + 1

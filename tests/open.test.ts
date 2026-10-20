@@ -92,6 +92,51 @@ test("repeat open focuses the tab, and a closed tab rebuilds from current projec
   ]);
 });
 
+test.each(["open", "add"])("%s reuses a live tab in another session but replaces a closed tab in the caller", (action) => {
+  expect(f.wr(["add", "shared"]).code).toBe(0);
+  const entry = f.state().entries[0];
+  const caller = { REX_SESSION: "session:caller" };
+
+  const reused = f.wr([action, "shared"], f.primary, caller);
+  expect(reused.err).toBe("");
+  expect(reused.code).toBe(0);
+  expect(f.state().entries).toEqual([entry]);
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].session_id).toBe(entry.sessionId);
+  expect(f.tabs()[0].window_id).toBe(entry.windowId);
+
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs = [];
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+  const reopened = f.wr([action, "shared"], f.primary, caller);
+  expect(reopened.err).toBe("");
+  expect(reopened.code).toBe(0);
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].session_id).toBe(caller.REX_SESSION);
+  expect(f.tabs()[0].window_id).not.toBe(entry.windowId);
+  expect(f.tabs()[0].cwd).toBe(entry.path);
+  expect(f.state().entries).toEqual([{ ...entry, sessionId: caller.REX_SESSION, windowId: f.tabs()[0].window_id }]);
+});
+
+test.each(["tab", "session"])("failed recovery of a missing %s preserves the saved tab location", (missing) => {
+  expect(f.wr(["add", "shared"]).code).toBe(0);
+  const state = f.state();
+  if (missing === "session") {
+    state.entries[0].sessionId = "missing";
+    writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
+  }
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs = [];
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+
+  const result = f.wr(["open", "shared"], f.primary, { REX_SESSION: "session:caller", WR_FAKE_FAIL: "open-after" });
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("close that tab manually before retrying.");
+  expect(f.state()).toEqual(state);
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].session_id).toBe("session:caller");
+});
+
 test("open does not apply file rules or change existing worktree files", () => {
   f.local({ files: { copy: [".env"], symlink: ["secret.txt"] } });
   f.write(join(f.primary, ".env"), "primary-env\n");

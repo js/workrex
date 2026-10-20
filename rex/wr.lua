@@ -25,11 +25,10 @@ local function window(args)
     return nil, false
   end
 
+  local view = call("session.attach", { session_id = args.session_id }).view
   if not args.window_id then
     return nil, true
   end
-
-  local view = call("session.view", { session_id = args.session_id })
   for _, item in ipairs(view.windows or {}) do
     if item.window_id == args.window_id then
       return item, true

@@ -86,6 +86,80 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
   }
 }, 30_000);
 
+real.each(["tab", "session"])("real Rex reuses another session's live tab and replaces a missing %s in the caller", (missing) => {
+  const f = fixture();
+  const env = { ...f.env, PATH: process.env.PATH, WR_LUA: resolve(import.meta.dir, "../rex/wr.lua") };
+  const sessions: string[] = [];
+  function rex(args: string[]) {
+    const result = Bun.spawnSync(["rex", ...args], { env, stdout: "pipe", stderr: "pipe" });
+    if (result.exitCode) {
+      throw new Error(result.stderr.toString());
+    }
+    return result.stdout.toString();
+  }
+
+  try {
+    const owner = JSON.parse(rex(["new", "wr-test-owner", "-c", f.root, "--json"])).session_id;
+    sessions.push(owner);
+    const caller = JSON.parse(rex(["new", "wr-test-caller", "-c", f.root, "--json"])).session_id;
+    sessions.push(caller);
+    const overrides = { PATH: process.env.PATH!, WR_LUA: env.WR_LUA, REX_SESSION: owner, REX_BLOCK: "" };
+    const fromCaller = { ...overrides, REX_SESSION: caller };
+    const view = (session: string) => JSON.parse(rex(["session", "inspect", session, "--json"]));
+    f.local({ panes: [{ command: ["printf", "wr-cross-session\\n"] }] });
+    expect(f.wr(["add", "shared"], f.primary, overrides).code).toBe(0);
+    const entry = f.state().entries[0];
+
+    const opened = f.wr(["open", "shared"], f.primary, fromCaller);
+    expect(opened.err).toBe("");
+    expect(opened.code).toBe(0);
+    expect(f.state().entries[0]).toEqual(entry);
+    expect(view(owner).windows).toHaveLength(2);
+    expect(view(owner).active_window_id).toBe(entry.windowId);
+    expect(view(caller).windows).toHaveLength(1);
+    const listed = f.wr(["ls"], f.primary, fromCaller);
+    expect(listed.err).toBe("");
+    expect(listed.code).toBe(0);
+    expect(listed.out).toContain("shared\topen\tready");
+
+    if (missing === "session") {
+      rex(["kill", owner]);
+      sessions.splice(sessions.indexOf(owner), 1);
+    } else {
+      rex(["window", "close", "-s", owner, entry.windowId]);
+    }
+    expect(f.wr(["ls"], f.primary, fromCaller).out).toContain("shared\tclosed\tready");
+    const reopened = f.wr(["open", "shared"], f.primary, fromCaller);
+    expect(reopened.err).toBe("");
+    expect(reopened.code).toBe(0);
+    const recreated = f.state().entries[0];
+    expect(recreated.windowId).not.toBe(entry.windowId);
+    expect(recreated.sessionId).toBe(caller);
+    expect(view(caller).windows).toHaveLength(2);
+    expect(view(caller).active_window_id).toBe(recreated.windowId);
+    if (missing === "tab") {
+      expect(view(owner).windows).toHaveLength(1);
+    }
+
+    const removed = f.wr(["rm", "shared"], f.primary, missing === "tab" ? overrides : fromCaller);
+    expect(removed.err).toBe("");
+    expect(removed.code).toBe(0);
+    expect(f.state().entries).toEqual([]);
+    expect(existsSync(entry.path)).toBe(false);
+    if (missing === "tab") {
+      expect(view(owner).windows).toHaveLength(1);
+    }
+    expect(view(caller).windows).toHaveLength(1);
+  } finally {
+    const cleanup = sessions.map((session) => Bun.spawnSync(["rex", "kill", session], { env, stdout: "pipe", stderr: "pipe" }));
+    f.dispose();
+    for (const result of cleanup) {
+      expect(result.stderr.toString()).toBe("");
+      expect(result.exitCode).toBe(0);
+    }
+  }
+}, 30_000);
+
 real("real Rex opens nested panes from JSONC in the worktree, focuses by depth-first position, and rebuilds them on reopen", async () => {
   const f = fixture();
   const env = { ...f.env, PATH: process.env.PATH, WR_LUA: resolve(import.meta.dir, "../rex/wr.lua") };
