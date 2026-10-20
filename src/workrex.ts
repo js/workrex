@@ -44,7 +44,7 @@ function show(repo: Repo, entry: Entry) {
         "A failed file-copy step can be abandoned with wr rm and --force.",
     );
   }
-  repo.verify(entry);
+  repo.verifyWorktree(entry);
 
   const status = inspectTab(entry);
   if (!status.sessionExists) {

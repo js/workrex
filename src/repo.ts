@@ -183,7 +183,7 @@ export class Repo {
     throw new Error("Cannot determine the default branch. Set main_branch in .workrex.json or use merge --into.");
   }
 
-  verify(entry: Entry): Worktree {
+  verifyWorktree(entry: Entry): Worktree {
     const wt = worktrees(this.primary).find((item) => item.path === entry.path);
     if (!wt || !present(entry.path)) {
       throw new Error(`Worktree is missing: ${entry.path}. Its registration has been retained.`);
@@ -200,6 +200,11 @@ export class Repo {
     if (gitDir !== entry.gitDir || common !== this.common) {
       throw new Error(`Worktree ownership changed: ${entry.path}`);
     }
+    return wt;
+  }
+
+  verify(entry: Entry): Worktree {
+    const wt = this.verifyWorktree(entry);
     if (wt.branch !== entry.branch && !(wt.branch === null && operation(entry.path))) {
       throw new Error(`Worktree no longer has branch ${entry.branch}: ${entry.path}`);
     }

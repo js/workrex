@@ -298,18 +298,100 @@ test("open preserves managed ownership and inherits global panes from a linked c
   expect(f.tabs()[0].panes).toEqual([{ command: ["global-pane"], focus: false }]);
 });
 
-test("open refuses a switched worktree without registering its path twice", () => {
+test("open reopens a switched external worktree by its registered name without registering the path twice", () => {
   const path = external("ext");
   expect(f.wr(["open", "ext"]).code).toBe(0);
   const entry = f.state().entries[0];
+  const windowId = f.tabs()[0].window_id;
   f.git(["switch", "-c", "different"], path);
 
-  expect(f.wr(["open", "ext"]).err).toContain("no longer has branch ext");
+  const again = f.wr(["open", "ext"]);
+  expect(again.err).toBe("");
+  expect(again.code).toBe(0);
+  expect(again.out).toBe(`ext\t${path}\topen\n`);
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].window_id).toBe(windowId);
+  expect(f.tabs()[0].cwd).toBe(path);
+  expect(f.git(["branch", "--show-current"], path)).toBe("different");
+  expect(f.state().entries).toEqual([entry]);
+
   const result = f.wr(["open", "different"]);
   expect(result.code).toBe(1);
   expect(result.err).toContain(`${path} is already registered as ext`);
   expect(f.state().entries).toEqual([entry]);
   expect(f.tabs()).toHaveLength(1);
+  expect(f.git(["branch", "--show-current"], path)).toBe("different");
+});
+
+test("open reopens a switched managed worktree by its registered name without moving Git state", () => {
+  const name = "investigate-sentry-ELTON-APP-3D8";
+  expect(f.wr(["add", name]).code).toBe(0);
+  const path = f.path(name);
+  f.write(join(path, "tracked.txt"), "dirty tracked\n");
+  f.write(join(path, "untracked.txt"), "dirty untracked\n");
+  const head = f.git(["rev-parse", "HEAD"], path);
+  f.git(["switch", "-c", "fix/apple-pay-cancellation"], path);
+  const entry = f.state().entries[0];
+  const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
+  store.tabs = [];
+  writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
+
+  const result = f.wr(["open", name]);
+
+  expect(result.err).toBe("");
+  expect(result.code).toBe(0);
+  expect(result.out).toBe(`${name}\t${path}\topen\n`);
+  expect(f.tabs()).toHaveLength(1);
+  expect(f.tabs()[0].cwd).toBe(path);
+  const reopened = f.state().entries[0];
+  expect(f.state().entries).toHaveLength(1);
+  expect(reopened.branch).toBe(name);
+  expect(reopened.phase).toBe("ready");
+  expect(reopened.path).toBe(entry.path);
+  expect(reopened.gitDir).toBe(entry.gitDir);
+  expect(reopened.identity).toBe(entry.identity);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("fix/apple-pay-cancellation");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("dirty tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("dirty untracked\n");
+
+  const removed = f.wr(["rm", name, "--force"]);
+  expect(removed.code).toBe(1);
+  expect(removed.err).toContain(`Worktree no longer has branch ${name}`);
+  const merged = f.wr(["merge", name, "--force"]);
+  expect(merged.code).toBe(1);
+  expect(merged.err).toContain(`Worktree no longer has branch ${name}`);
+  expect(existsSync(path)).toBe(true);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("fix/apple-pay-cancellation");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("dirty tracked\n");
+  expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("dirty untracked\n");
+  expect(f.state().entries).toHaveLength(1);
+  expect(f.state().entries[0].branch).toBe(name);
+  expect(f.state().entries[0].phase).toBe("ready");
+  expect(f.tabs()).toHaveLength(1);
+});
+
+test("open refuses a worktree whose directory identity changed", () => {
+  expect(f.wr(["add", "feature"]).code).toBe(0);
+  const path = f.path("feature");
+  const state = f.state();
+  state.entries[0].identity = "replaced";
+  writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
+  const before = f.state().entries;
+  const head = f.git(["rev-parse", "HEAD"], path);
+  f.write(join(path, "tracked.txt"), "keep\n");
+
+  const result = f.wr(["open", "feature"]);
+
+  expect(result.code).toBe(1);
+  expect(result.err).toContain(`Worktree identity changed: ${path}`);
+  expect(f.state().entries).toEqual(before);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(head);
+  expect(f.git(["branch", "--show-current"], path)).toBe("feature");
+  expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("keep\n");
+  expect(f.tabs()).toHaveLength(1);
+  expect(existsSync(path)).toBe(true);
 });
 
 test("unconfirmed open tells you to close the tab manually", () => {
