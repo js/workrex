@@ -16,6 +16,9 @@ export async function run(args: string[]) {
         "  wr add <name> [--branch <source>]\n" +
         "    Create a worktree and open its Rex tab, or reopen a registered one.\n" +
         "    New branches start at HEAD unless --branch is given.\n\n" +
+        "  wr add [<name>] --pr <number>\n" +
+        "    Check out a GitHub PR with gh and open its configured Rex tab.\n" +
+        "    Defaults to the PR's branch name; cannot be combined with --branch.\n\n" +
         "  wr open <name>\n" +
         "    Focus or reopen a Rex tab for an existing worktree, including one created outside wr.\n\n" +
         "  wr merge <name> [--into <target>] [--force]\n" +
@@ -47,16 +50,19 @@ export async function run(args: string[]) {
   } else if (command === "add") {
     const parsed = parseArgs({
       args: args.slice(1),
-      options: { branch: { type: "string" } },
+      options: { branch: { type: "string" }, pr: { type: "string" } },
       allowPositionals: true,
       strict: true,
     });
-    if (parsed.positionals.length !== 1) {
-      throw new Error("Usage: wr add <name> [--branch <source>]");
+    if (parsed.positionals.length > 1 || (parsed.values.pr === undefined && parsed.positionals.length !== 1)) {
+      throw new Error("Usage: wr add <name> [--branch <source>] or wr add [<name>] --pr <number>");
+    }
+    if (parsed.values.pr !== undefined && parsed.values.branch !== undefined) {
+      throw new Error("--pr cannot be combined with --branch");
     }
 
     const repo = new Repo(process.cwd());
-    repo.locked(() => add(repo, parsed.positionals[0], parsed.values.branch));
+    repo.locked(() => add(repo, parsed.positionals[0], parsed.values));
   } else if (command === "open") {
     let name: string;
     try {

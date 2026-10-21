@@ -20,6 +20,10 @@ test.each([
     Create a worktree and open its Rex tab, or reopen a registered one.
     New branches start at HEAD unless --branch is given.
 
+  wr add [<name>] --pr <number>
+    Check out a GitHub PR with gh and open its configured Rex tab.
+    Defaults to the PR's branch name; cannot be combined with --branch.
+
   wr open <name>
     Focus or reopen a Rex tab for an existing worktree, including one created outside wr.
 

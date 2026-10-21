@@ -1,0 +1,48 @@
+#!/usr/bin/env bun
+import { appendFileSync, readFileSync } from "node:fs";
+
+const path = process.env.WR_FAKE_PR;
+if (!path) {
+  throw new Error("Fake gh requires WR_FAKE_PR");
+}
+const args = process.argv.slice(2);
+appendFileSync(`${path}.calls`, JSON.stringify({ args, cwd: process.cwd(), repo: process.env.GH_REPO }) + "\n");
+const pr = JSON.parse(readFileSync(path, "utf8"));
+const failure = process.env.WR_FAKE_GH_FAIL;
+
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+function git(args: string[]) {
+  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe" });
+  if (result.exitCode !== 0) {
+    fail(result.stderr.toString());
+  }
+}
+
+if (args[0] !== "pr" || args[2] !== "830") {
+  fail("Could not resolve to a PullRequest with the number provided");
+}
+if (args[1] === "view") {
+  if (failure === "view") fail("gh: authentication failed");
+  if (failure === "invalid-json") {
+    console.log("not json");
+  } else {
+    console.log(JSON.stringify({ headRefName: pr.branch, headRefOid: pr.head }));
+  }
+} else if (args[1] === "checkout") {
+  if (failure === "old-gh") fail("unknown flag: --worktree");
+  if (failure === "checkout-before") fail("gh: fetch failed");
+  const branch = args[args.indexOf("--branch") + 1];
+  const worktree = args[args.indexOf("--worktree") + 1];
+  if (!args.includes("--branch") || !args.includes("--worktree") || args.includes("--force")) {
+    fail("Expected a non-forced PR checkout into an explicit worktree");
+  }
+  git(["fetch", pr.remote, `refs/pull/830/head:refs/heads/${branch}`, "--no-tags"]);
+  if (failure === "checkout-after-fetch") fail("gh: failed after fetch");
+  git(["worktree", "add", "--", worktree, branch]);
+  if (failure === "checkout-after-tree") fail("gh: failed after worktree creation");
+} else {
+  fail(`Unexpected gh arguments: ${args.join(" ")}`);
+}

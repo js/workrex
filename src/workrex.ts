@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { config, fileRules, inside, present, type FileRule } from "./config";
 import { git, Repo, validateBranch, worktreePath, worktrees, type Entry } from "./repo";
 import { inspectTab, openTab } from "./rex";
+import { gh, pullRequest } from "./github";
 
 function installFiles(primary: string, destination: string, rules: FileRule[]) {
   for (const rule of rules) {
@@ -56,7 +57,16 @@ function show(repo: Repo, entry: Entry) {
   console.log(`${entry.branch}\t${entry.path}\topen`);
 }
 
-export function add(repo: Repo, name: string, source?: string) {
+export function add(repo: Repo, name: string | undefined, options: { branch?: string; pr?: string } = {}) {
+  const source = options.branch;
+  if (source !== undefined && options.pr !== undefined) {
+    throw new Error("--pr cannot be combined with --branch");
+  }
+  const pr = options.pr === undefined ? undefined : pullRequest(repo.primary, options.pr);
+  name ??= pr?.branch;
+  if (name === undefined) {
+    throw new Error("Provide a worktree name or --pr <number>");
+  }
   validateBranch(repo.primary, name);
 
   const existing = repo.entries.find((entry) => entry.branch === name);
@@ -72,13 +82,17 @@ export function add(repo: Repo, name: string, source?: string) {
   const label = `${basename(repo.primary)}/${name}`;
 
   if (worktrees(repo.primary).some((wt) => wt.branch === name)) {
-    throw new Error(`Branch ${name} is already in an unmanaged worktree. Open it with wr open ${name}`);
+    const hint = pr ? `Use wr add <new-name> --pr ${pr.number}.` : `Open it with wr open ${name}`;
+    throw new Error(`Branch ${name} is already in an unmanaged worktree. ${hint}`);
   }
   const path = worktreePath(repo.primary, name);
   if (present(path) || repo.entries.some((entry) => entry.path === path)) {
     throw new Error(`Worktree path already exists: ${path}`);
   }
   const branchExists = repo.branch(name) !== null;
+  if (branchExists && pr) {
+    throw new Error(`Branch ${name} already exists. Use wr add ${name} to keep it, or wr add <new-name> --pr ${pr.number}.`);
+  }
   if (branchExists && source !== undefined) {
     throw new Error("--branch cannot reset an existing branch");
   }
@@ -90,7 +104,7 @@ export function add(repo: Repo, name: string, source?: string) {
     }
     start = `refs/heads/${source}`;
   }
-  const startHead = git(repo.cwd, ["rev-parse", "--verify", `${start}^{commit}`]).out.trim();
+  const startHead = pr?.head ?? git(repo.cwd, ["rev-parse", "--verify", `${start}^{commit}`]).out.trim();
   const rules = fileRules(repo.primary, cfg);
 
   const entry: Entry = {
@@ -107,13 +121,22 @@ export function add(repo: Repo, name: string, source?: string) {
   repo.save();
 
   try {
-    git(
-      repo.primary,
-      branchExists ? ["worktree", "add", "--", path, name] : ["worktree", "add", "-b", name, "--", path, startHead],
-    );
+    if (pr) {
+      gh(repo.primary, ["pr", "checkout", pr.number, "--branch", name, "--worktree", path]);
+    } else {
+      git(
+        repo.primary,
+        branchExists ? ["worktree", "add", "--", path, name] : ["worktree", "add", "-b", name, "--", path, startHead],
+      );
+    }
   } catch (error) {
     const trees = worktrees(repo.primary);
-    if (!trees.some((wt) => wt.path === path)) {
+    if (trees.some((wt) => wt.path === path)) {
+      // gh can fail after creating the worktree (for example, while setting its upstream).
+      // Retain its identity so the normal incomplete-creation cleanup can remove it.
+      entry.gitDir = realpathSync(git(path, ["rev-parse", "--absolute-git-dir"]).out.trim());
+      repo.save();
+    } else {
       if (!branchExists && repo.branch(name) !== null) {
         if (trees.some((wt) => wt.branch === name)) {
           throw new Error(`Creation failed but ${name} is now checked out elsewhere. Inspect its registration before retrying.`);

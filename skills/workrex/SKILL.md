@@ -19,11 +19,13 @@ description: Use Workrex (wr) to create, open, reopen, list, merge, or remove Gi
 ```sh
 wr add fix-login
 wr add fix-settings --branch develop
+wr add --pr 830
 wr open old-fix
 wr ls
 ```
 
-- New branches start at the **invoking checkout's HEAD**, not automatically at `main_branch`. `--branch` selects an existing local source branch; Workrex never fetches or pulls.
+- Without `--pr`, new branches start at the **invoking checkout's HEAD**, not automatically at `main_branch`. `--branch` selects an existing local source branch without fetching or pulling.
+- `wr add --pr <number>` fetches a GitHub PR with `gh pr checkout --worktree`, using its head branch name and the normal Workrex file rules and pane config. It requires authenticated `gh` with `--worktree` support and leaves the invoking checkout unchanged. Use `wr add <new-name> --pr <number>` for branch-name collisions, including fork PRs named `main`. `--pr` and `--branch` are mutually exclusive. Registered names reopen without fetching or resetting; unregistered existing branches are refused rather than updated.
 - An existing local branch keeps its commits. Pass `--branch` only for a new branch and unregistered worktree; it cannot reset an existing branch or retarget a registered worktree.
 - Repeating `add` or `open` focuses an open tab or recreates a closed tab. Neither reapplies file rules, rebuilds an open layout, or restores a missing directory.
 - `wr open <name>` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree, not a path. Use the registered name after switching branches inside a worktree. Opening keeps the registered branch unchanged; `merge` and `rm` still refuse a managed worktree whose branch changed. It uses merged global and primary-checkout project config without creating a worktree or applying file rules. Configured pane commands run in the worktree as usual.
