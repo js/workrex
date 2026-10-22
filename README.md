@@ -15,7 +15,9 @@ mkdir -p "$HOME/.local/bin"
 ln -s "$PWD/wr" "$HOME/.local/bin/wr"
 ```
 
-Add `~/.local/bin` to your `PATH`. Generate the Lua config with this checkout's path:
+Add `~/.local/bin` to your `PATH`. For Fish completions, create `~/.config/fish/completions/wr.fish` containing `wr completions fish | source`.
+
+Generate the Lua config with this checkout's path:
 
 ```sh
 printf 'package.path = "%s/rex/?.lua;" .. package.path\nrequire("wr")\n' "$PWD"

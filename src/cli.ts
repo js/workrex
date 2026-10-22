@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { Repo } from "./repo";
 import { checkConfig } from "./config";
+import { completionNames, fishScript } from "./completions";
 import { add, list, open } from "./workrex";
 import { deferTabCleanup, merge, remove } from "./lifecycle";
 
@@ -30,8 +31,28 @@ export async function run(args: string[]) {
         "  wr ls\n" +
         "    List this repo's registered worktrees with their paths, tab status, and state.\n\n" +
         "  wr config check\n" +
-        "    Check global and current-directory .jsonc files for syntax errors, not settings validity.",
+        "    Check global and current-directory .jsonc files for syntax errors, not settings validity.\n\n" +
+        "  wr completions fish\n" +
+        "    Print the Fish completion script. Install it with wr completions fish | source in ~/.config/fish/completions/wr.fish.",
     );
+    return;
+  }
+
+  if (args[0] === "__complete") {
+    const kind = args[1];
+    if (args.length === 2 && (kind === "registered" || kind === "open" || kind === "branches")) {
+      for (const name of completionNames(process.cwd(), kind)) {
+        console.log(name);
+      }
+    }
+    return;
+  }
+
+  if (args[0] === "completions") {
+    if (args.length !== 2 || args[1] !== "fish") {
+      throw new Error("Usage: wr completions fish");
+    }
+    process.stdout.write(fishScript());
     return;
   }
 

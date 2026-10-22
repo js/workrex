@@ -40,5 +40,8 @@ test.each([
 
   wr config check
     Check global and current-directory .jsonc files for syntax errors, not settings validity.
+
+  wr completions fish
+    Print the Fish completion script. Install it with wr completions fish | source in ~/.config/fish/completions/wr.fish.
 `);
 });
