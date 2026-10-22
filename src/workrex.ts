@@ -63,7 +63,10 @@ export function add(repo: Repo, name: string | undefined, options: { branch?: st
     throw new Error("--pr cannot be combined with --branch");
   }
   const pr = options.pr === undefined ? undefined : pullRequest(repo.primary, options.pr);
-  name ??= pr?.branch;
+  if (name === undefined && pr) {
+    validateBranch(repo.primary, pr.branch);
+    name = `pr-${pr.number}-${pr.branch}`;
+  }
   if (name === undefined) {
     throw new Error("Provide a worktree name or --pr <number>");
   }

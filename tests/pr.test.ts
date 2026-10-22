@@ -24,6 +24,9 @@ beforeEach(() => {
 });
 afterEach(() => { f.dispose(); });
 
+function localBranch() {
+  return `pr-830-${pr.branch}`;
+}
 function savePR() {
   writeFileSync(metadata, JSON.stringify(pr));
 }
@@ -37,8 +40,8 @@ function calls(): { args: string[]; cwd: string; repo: string }[] {
 }
 function expectNoCreation() {
   expect(f.git(["worktree", "list", "--porcelain"]).match(/^worktree /gm)).toHaveLength(1);
-  expect(f.command(["git", "show-ref", "--verify", `refs/heads/${pr.branch}`]).code).not.toBe(0);
-  expect(existsSync(f.path(pr.branch))).toBe(false);
+  expect(f.command(["git", "show-ref", "--verify", `refs/heads/${localBranch()}`]).code).not.toBe(0);
+  expect(existsSync(f.path(localBranch()))).toBe(false);
   if (existsSync(f.env.WR_FAKE_STORE)) expect(f.tabs()).toEqual([]);
   const state = join(f.primary, ".git/workrex/state.json");
   if (existsSync(state)) expect(f.state().entries).toEqual([]);
@@ -56,16 +59,20 @@ test("--pr fetches the PR into a managed worktree and applies the merged Workrex
   const result = wr(undefined, f.primary, { GH_REPO: "wrong/repository" });
   expect(result.err).toBe("");
   expect(result.code).toBe(0);
-  const path = f.path(pr.branch);
-  expect(result.out).toContain(`${pr.branch}\t${path}\topen`);
+  expect(localBranch()).toBe("pr-830-feature/pr-review");
+  const path = f.path(localBranch());
+  expect(path).toEndWith("/pr-830-feature%2Fpr-review");
+  expect(f.state().entries[0].branch).toBe(localBranch());
+  expect(f.command(["git", "show-ref", "--verify", `refs/heads/${pr.branch}`]).code).not.toBe(0);
+  expect(result.out).toContain(`${localBranch()}\t${path}\topen`);
   expect(f.git(["rev-parse", "HEAD"], path)).toBe(pr.head);
-  expect(f.git(["branch", "--show-current"], path)).toBe(pr.branch);
+  expect(f.git(["branch", "--show-current"], path)).toBe(localBranch());
   expect(readFileSync(join(path, "pr.txt"), "utf8")).toBe("PR content\n");
   expect(readFileSync(join(path, ".env"), "utf8")).toBe("primary env\n");
   expect(readlinkSync(join(path, "secret.txt"))).toBe(join(f.primary, "secret.txt"));
   expect(f.tabs()).toHaveLength(1);
   expect(f.tabs()[0].cwd).toBe(path);
-  expect(f.tabs()[0].label).toBe(`project space/${pr.branch}`);
+  expect(f.tabs()[0].label).toBe(`project space/${localBranch()}`);
   expect(f.tabs()[0].panes).toEqual([{ command: ["sh"], focus: false }]);
   expect(f.state().entries[0].phase).toBe("ready");
   expect(f.state().entries[0].gitDir).toBeTruthy();
@@ -74,7 +81,7 @@ test("--pr fetches the PR into a managed worktree and applies the merged Workrex
   expect(f.git(["status", "--porcelain"])).toBe(status);
   expect(calls()).toEqual([
     { args: ["pr", "view", "830", "--json", "headRefName,headRefOid"], cwd: f.primary, repo: "" },
-    { args: ["pr", "checkout", "830", "--branch", pr.branch, "--worktree", path], cwd: f.primary, repo: "" },
+    { args: ["pr", "checkout", "830", "--branch", localBranch(), "--worktree", path], cwd: f.primary, repo: "" },
   ]);
 });
 
@@ -87,8 +94,32 @@ test("--pr works from a linked checkout and uses primary-checkout config", () =>
   expect(result.err).toBe("");
   expect(result.code).toBe(0);
   expect(f.git(["branch", "--show-current"], linked)).toBe("linked");
-  expect(f.git(["rev-parse", "HEAD"], f.path(pr.branch))).toBe(pr.head);
+  expect(f.git(["rev-parse", "HEAD"], f.path(localBranch()))).toBe(pr.head);
   expect(f.tabs()[0].panes).toEqual([{ command: "primary-command", focus: false }]);
+});
+
+test("the default PR prefix avoids colliding with a fork's main branch", () => {
+  pr.branch = "main";
+  savePR();
+  const initial = f.git(["rev-parse", "main"]);
+  expect(wr().code).toBe(0);
+  const path = f.path("pr-830-main");
+  expect(f.git(["branch", "--show-current"], path)).toBe("pr-830-main");
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(pr.head);
+  expect(f.git(["rev-parse", "main"])).toBe(initial);
+});
+
+test("existing unprefixed registrations remain available under their original name", () => {
+  expect(f.wr(["add", pr.branch]).code).toBe(0);
+  const path = f.path(pr.branch);
+  const originalHead = f.git(["rev-parse", "HEAD"], path);
+  expect(wr().code).toBe(0);
+  expect(f.git(["rev-parse", "HEAD"], path)).toBe(originalHead);
+  expect(f.git(["branch", "--show-current"], path)).toBe(pr.branch);
+  expect(f.wr(["open", pr.branch]).code).toBe(0);
+  expect(f.state().entries.map((entry: { branch: string }) => entry.branch)).toEqual([
+    pr.branch, "pr-830-feature/pr-review",
+  ]);
 });
 
 test("an explicit name lets a fork PR use a different local branch name", () => {
@@ -107,7 +138,7 @@ test("repeating --pr reuses or reopens the tab without resetting local work or r
   f.local({ files: { copy: [".env"] } });
   f.write(join(f.primary, ".env"), "primary\n");
   expect(wr().code).toBe(0);
-  const path = f.path(pr.branch);
+  const path = f.path(localBranch());
   f.write(join(path, "local.txt"), "local commit\n");
   f.git(["add", "local.txt"], path);
   f.git(["commit", "-m", "Local work"], path);
@@ -150,28 +181,28 @@ test.each([
 });
 
 test("an existing local branch is never moved by --pr", () => {
-  f.git(["branch", pr.branch]);
-  const head = f.git(["rev-parse", pr.branch]);
+  f.git(["branch", localBranch()]);
+  const head = f.git(["rev-parse", localBranch()]);
   const result = wr();
   expect(result.code).toBe(1);
   expect(result.err).toContain("already exists");
-  expect(f.git(["rev-parse", pr.branch])).toBe(head);
+  expect(f.git(["rev-parse", localBranch()])).toBe(head);
   expect(calls()).toHaveLength(1);
-  expect(existsSync(f.path(pr.branch))).toBe(false);
+  expect(existsSync(f.path(localBranch()))).toBe(false);
 });
 
 test("unmanaged worktrees and path collisions are preserved", () => {
   const path = join(f.root, "unmanaged");
-  f.git(["worktree", "add", "-b", pr.branch, path]);
+  f.git(["worktree", "add", "-b", localBranch(), path]);
   expect(wr().err).toContain("unmanaged worktree");
   expect(calls()).toHaveLength(1);
-  expect(f.git(["branch", "--show-current"], path)).toBe(pr.branch);
+  expect(f.git(["branch", "--show-current"], path)).toBe(localBranch());
 
   pr.branch = "path-collision";
   savePR();
-  f.write(f.path(pr.branch), "keep me");
+  f.write(f.path(localBranch()), "keep me");
   expect(wr().err).toContain("path already exists");
-  expect(readFileSync(f.path(pr.branch), "utf8")).toBe("keep me");
+  expect(readFileSync(f.path(localBranch()), "utf8")).toBe("keep me");
   expect(calls()).toHaveLength(2);
 });
 
@@ -189,7 +220,7 @@ test("PR branch names are passed literally, not through a shell", () => {
   pr.branch = "semi;colon";
   savePR();
   expect(wr().code).toBe(0);
-  expect(f.git(["branch", "--show-current"], f.path(pr.branch))).toBe(pr.branch);
+  expect(f.git(["branch", "--show-current"], f.path(localBranch()))).toBe(localBranch());
 });
 
 test.each(["view", "invalid-json", "checkout-before", "checkout-after-fetch", "old-gh"])(
@@ -236,7 +267,7 @@ test("failure after gh creates the worktree keeps a removable incomplete registr
   expect(f.state().entries[0].phase).toBe("creating");
   expect(f.state().entries[0].gitDir).toBeTruthy();
   expect(wr().err).toContain("unfinished creating");
-  expect(f.wr(["rm", pr.branch, "--force"]).code).toBe(0);
+  expect(f.wr(["rm", localBranch(), "--force"]).code).toBe(0);
   expectNoCreation();
 });
 
@@ -244,9 +275,9 @@ test("a failed file rule retains the PR worktree for inspection and cleanup", ()
   f.local({ files: { copy: ["tracked.txt"] } });
   expect(wr().err).toContain("destination already exists");
   expect(f.state().entries[0].phase).toBe("creating");
-  expect(f.git(["rev-parse", "HEAD"], f.path(pr.branch))).toBe(pr.head);
+  expect(f.git(["rev-parse", "HEAD"], f.path(localBranch()))).toBe(pr.head);
   expect(wr().err).toContain("unfinished creating");
-  expect(f.wr(["rm", pr.branch, "--force"]).code).toBe(0);
+  expect(f.wr(["rm", localBranch(), "--force"]).code).toBe(0);
   expectNoCreation();
 });
 
@@ -260,7 +291,7 @@ test("Rex failure leaves a ready PR worktree that can be reopened without anothe
 
 test("a missing PR worktree is not silently recreated", () => {
   expect(wr().code).toBe(0);
-  rmSync(f.path(pr.branch), { recursive: true });
+  rmSync(f.path(localBranch()), { recursive: true });
   expect(wr().err).toContain("missing");
   expect(calls().filter((call) => call.args[1] === "checkout")).toHaveLength(1);
 });

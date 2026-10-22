@@ -60,9 +60,9 @@ wr ls
 
 New branches start at the invoking checkout's HEAD unless you pass `--branch` or `--pr`. Existing branches keep their commits. `--branch` cannot reset them.
 
-`wr add --pr 830` uses `gh` to look up PR #830 in the current repository and check it out in a new worktree, including fetching fork PRs. It uses the PR's head branch name, applies the usual copy/symlink rules and merged Workrex pane config, and leaves the invoking checkout unchanged. Use `wr add review-830 --pr 830` to choose a different local branch name, for example when a fork PR uses `main`. `--pr` takes a positive PR number and cannot be combined with `--branch`.
+`wr add --pr 830` uses `gh` to look up PR #830 in the current repository and check it out in a new worktree, including fetching fork PRs. It names the local branch and worktree `pr-<number>-<headRefName>` (for example, `pr-830-feature/login`), applies the usual copy/symlink rules and merged Workrex pane config, and leaves the invoking checkout unchanged. Use `wr add review-830 --pr 830` to choose an exact local branch name without the automatic prefix. `--pr` takes a positive PR number and cannot be combined with `--branch`.
 
-If that name is already registered, `--pr` reopens it without fetching, resetting local work, or reapplying file rules. An unregistered existing branch or worktree is never updated: choose another name, or use ordinary `add`/`open` to keep its current commits.
+If that name is already registered, `--pr` reopens it without fetching, resetting local work, or reapplying file rules. Older unprefixed worktrees are not renamed; reopen them with `wr open <old-name>` or `wr add <old-name> --pr <number>`. An unregistered existing branch or worktree is never updated: choose another name, or use ordinary `add`/`open` to keep its current commits.
 
 Worktrees created with `add` live beside the primary checkout in `<repo>__worktrees/`. Branch names become directory names, with `feature/login` encoded as `feature%2Flogin`.
 
