@@ -34,7 +34,14 @@ test("merge rebases onto the default branch, fast-forwards, and removes all owne
 
   const result = ok(["merge", "feature"]);
 
-  expect(result.out).toBe("Rebased feature onto main and fast-forwarded main.\nRemoved feature.\n");
+  expect(result.out).toBe([
+    "Rebased feature onto main and fast-forwarded main.",
+    `Removed worktree: ${path}`,
+    "Deleted branch: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
   expect(f.git(["rev-parse", "main^"])).toBe(previous);
   expect(readFileSync(join(f.primary, "feature.txt"), "utf8")).toBe("feature\n");
   expect(existsSync(path)).toBe(false);
@@ -51,7 +58,14 @@ test("merge into an unchecked-out branch does not switch the primary checkout", 
 
   const result = ok(["merge", "feature", "--into", "target"]);
 
-  expect(result.out).toBe("Rebased feature onto target and fast-forwarded target.\nRemoved feature.\n");
+  expect(result.out).toBe([
+    "Rebased feature onto target and fast-forwarded target.",
+    `Removed worktree: ${path}`,
+    "Deleted branch: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
   expect(f.git(["branch", "--show-current"])).toBe("main");
   expect(f.git(["rev-parse", "main"])).toBe(main);
   expect(f.git(["show", "target:feature.txt"])).toBe("feature");
@@ -174,11 +188,18 @@ test("rm refuses unmerged or dirty work, while force abandons a paused rebase", 
   expect(f.state().entries).toEqual([]);
 });
 
-test("rm permits a clean branch already merged into main", () => {
+test("rm reports each completed step for a clean branch already merged into main", () => {
   const path = add();
 
-  ok(["rm", "feature"]);
+  const result = ok(["rm", "feature"]);
 
+  expect(result.out).toBe([
+    `Removed worktree: ${path}`,
+    "Deleted branch: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
   expect(existsSync(path)).toBe(false);
   expect(f.tabs()).toEqual([]);
 });
@@ -187,8 +208,15 @@ test("rm --force can clean up failed file setup", () => {
   f.local({ files: { copy: ["tracked.txt"] } });
   expect(f.wr(["add", "failed"]).code).toBe(1);
 
-  ok(["rm", "failed", "--force"]);
+  const result = ok(["rm", "failed", "--force"]);
 
+  expect(result.out).toBe([
+    `Removed worktree: ${f.path("failed")}`,
+    "Deleted branch: failed",
+    "Tab already closed: failed",
+    "Removed registration: failed",
+    "Removed failed.",
+  ].join("\n") + "\n");
   expect(f.state().entries).toEqual([]);
   expect(existsSync(f.path("failed"))).toBe(false);
 });
@@ -207,17 +235,89 @@ test.each(["merge", "rm"])("%s closes only the saved window ID, regardless of ta
   expect(f.state().entries).toEqual([]);
 });
 
-test("tab closure failure retains a retryable registration after Git cleanup", () => {
+test.each(["merge", "rm"])("%s reports completed Git cleanup but not a failed tab closure", (action) => {
   const path = add();
   commit(path);
 
-  const result = f.wr(["merge", "feature"], f.primary, { WR_FAKE_FAIL: "wr_close" });
+  const result = f.wr([action, "feature", ...(action === "rm" ? ["--force"] : [])], f.primary, { WR_FAKE_FAIL: "wr_close" });
   expect(result.code).toBe(1);
+  expect(result.out).toBe([
+    ...(action === "merge" ? ["Rebased feature onto main and fast-forwarded main."] : []),
+    `Removed worktree: ${path}`,
+    "Deleted branch: feature",
+  ].join("\n") + "\n");
   expect(existsSync(path)).toBe(false);
   expect(f.state().entries[0].phase).toBe("removing");
   expect(f.tabs()).toHaveLength(1);
 
-  ok(["rm", "feature"]);
+  const retried = ok(["rm", "feature"]);
+  expect(retried.out).toBe([
+    `Worktree already removed: ${path}`,
+    "Branch already removed: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
+  expect(f.state().entries).toEqual([]);
+  expect(f.tabs()).toEqual([]);
+});
+
+test("rm stops reporting progress when branch deletion fails and resumes on retry", () => {
+  const path = add();
+  const lock = join(f.primary, ".git/refs/heads/feature.lock");
+  f.write(lock, "");
+
+  const result = f.wr(["rm", "feature"]);
+
+  expect(result.code).toBe(1);
+  expect(result.out).toBe(`Removed worktree: ${path}\n`);
+  expect(existsSync(path)).toBe(false);
+  expect(f.git(["rev-parse", "feature"])).toBe(f.git(["rev-parse", "main"]));
+  expect(f.state().entries[0].phase).toBe("removing");
+  expect(f.tabs()).toHaveLength(1);
+
+  rmSync(lock);
+  const retried = ok(["rm", "feature"]);
+  expect(retried.out).toBe([
+    `Worktree already removed: ${path}`,
+    "Deleted branch: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
+  expect(f.state().entries).toEqual([]);
+  expect(f.tabs()).toEqual([]);
+});
+
+test("rm from its own tab reports Git cleanup and logs deferred completion", async () => {
+  const path = add();
+  const log = join(f.primary, ".git/workrex/cleanup.log");
+  const result = f.wr(["rm", "feature"], path, { REX_BLOCK: f.tabs()[0].block_id });
+
+  expect(result.code).toBe(0);
+  expect(result.err).toBe("");
+  expect(result.out).toBe([
+    `Removed worktree: ${path}`,
+    "Deleted branch: feature",
+    `Closing this tab in the background. If it stays open, retry wr rm with the same name. Log: ${log}`,
+  ].join("\n") + "\n");
+  expect(existsSync(path)).toBe(false);
+
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && (
+    !readFileSync(log, "utf8").endsWith("Removed feature.\n") ||
+    existsSync(join(f.primary, ".git/workrex/lock"))
+  )) {
+    await Bun.sleep(50);
+  }
+
+  expect(readFileSync(log, "utf8")).toBe([
+    `Worktree already removed: ${path}`,
+    "Branch already removed: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
   expect(f.state().entries).toEqual([]);
   expect(f.tabs()).toEqual([]);
 });
@@ -230,8 +330,15 @@ test("cleanup resumes after the directory was removed but Git metadata remains",
   writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
   rmSync(path, { recursive: true });
 
-  ok(["rm", "feature"]);
+  const result = ok(["rm", "feature"]);
 
+  expect(result.out).toBe([
+    `Removed worktree metadata: ${path}`,
+    "Deleted branch: feature",
+    "Closed tab: feature",
+    "Removed registration: feature",
+    "Removed feature.",
+  ].join("\n") + "\n");
   expect(f.state().entries).toEqual([]);
   expect(f.git(["worktree", "list", "--porcelain"])).not.toContain(path);
   expect(f.tabs()).toEqual([]);
@@ -245,7 +352,9 @@ test("cleanup refuses a branch that changed after removal began", () => {
   writeFileSync(join(f.primary, ".git/workrex/state.json"), JSON.stringify(state));
   commit(path);
 
-  expect(f.wr(["rm", "feature", "--force"]).err).toContain("branch changed");
+  const result = f.wr(["rm", "feature", "--force"]);
+  expect(result.err).toContain("branch changed");
+  expect(result.out).toBe("");
   expect(existsSync(path)).toBe(true);
   expect(f.tabs()).toHaveLength(1);
 });

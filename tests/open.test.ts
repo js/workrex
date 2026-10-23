@@ -214,7 +214,11 @@ test("rm --force of an external worktree closes only the tab", () => {
 
   expect(result.err).toBe("");
   expect(result.code).toBe(0);
-  expect(result.out).toContain("Closed ext. wr did not create this worktree, so it and its branch remain.");
+  expect(result.out).toBe([
+    "Closed tab: ext",
+    "Removed registration: ext",
+    "Closed ext. wr did not create this worktree, so it and its branch remain.",
+  ].join("\n") + "\n");
   expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("dirty tracked\n");
   expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("dirty untracked\n");
   expect(readFileSync(join(path, "ignored/output"), "utf8")).toBe("dirty ignored\n");
@@ -270,6 +274,7 @@ test("a failed tab close keeps the external entry for a retry", () => {
 
   const failed = f.wr(["rm", "ext"], f.primary, { WR_FAKE_FAIL: "wr_close" });
   expect(failed.code).toBe(1);
+  expect(failed.out).toBe("");
   expect(f.state().entries[0].phase).toBe("external");
   expect(f.tabs()).toHaveLength(1);
   expect(existsSync(path)).toBe(true);

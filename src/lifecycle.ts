@@ -149,12 +149,16 @@ function finishRemoval(repo: Repo, entry: Entry): boolean {
       throw new Error("Missing worktree registration changed after cleanup began");
     }
     git(repo.primary, ["worktree", "remove", "--force", "--", entry.path]);
+    console.log(`Removed worktree metadata: ${entry.path}`);
   } else if (tree || present(entry.path)) {
     repo.verify(entry);
     if (!branch) {
       throw new Error("Source branch disappeared before worktree cleanup");
     }
     git(repo.primary, ["worktree", "remove", ...(entry.force ? ["--force"] : []), "--", entry.path]);
+    console.log(`Removed worktree: ${entry.path}`);
+  } else {
+    console.log(`Worktree already removed: ${entry.path}`);
   }
 
   if (branch) {
@@ -162,6 +166,9 @@ function finishRemoval(repo: Repo, entry: Entry): boolean {
       throw new Error("Source branch is checked out elsewhere. Refusing to delete it.");
     }
     git(repo.primary, ["update-ref", "-d", `refs/heads/${entry.branch}`, expected]);
+    console.log(`Deleted branch: ${entry.branch}`);
+  } else {
+    console.log(`Branch already removed: ${entry.branch}`);
   }
 
   return untrack(repo, entry, `Removed ${entry.branch}.`);
@@ -173,8 +180,10 @@ function untrack(repo: Repo, entry: Entry, done: string): boolean {
     return true;
   }
   closeTab(entry);
+  console.log(`${status.windowId ? "Closed tab" : "Tab already closed"}: ${entry.branch}`);
   repo.entries = repo.entries.filter((item) => item !== entry);
   repo.save();
+  console.log(`Removed registration: ${entry.branch}`);
   console.log(done);
   return false;
 }
