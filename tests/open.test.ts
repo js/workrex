@@ -405,9 +405,9 @@ test("open reopens a switched managed worktree by its registered name without mo
   expect(readFileSync(join(path, "tracked.txt"), "utf8")).toBe("dirty tracked\n");
   expect(readFileSync(join(path, "untracked.txt"), "utf8")).toBe("dirty untracked\n");
 
-  const removed = f.wr(["rm", name, "--force"]);
+  const removed = f.wr(["rm", name]);
   expect(removed.code).toBe(1);
-  expect(removed.err).toContain(`Worktree no longer has branch ${name}`);
+  expect(removed.err).toContain("Worktree is dirty");
   const merged = f.wr(["merge", name, "--force"]);
   expect(merged.code).toBe(1);
   expect(merged.err).toContain(`Worktree no longer has branch ${name}`);

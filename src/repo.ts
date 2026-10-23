@@ -25,6 +25,7 @@ export type Entry = {
   phase: "creating" | "ready" | "removing" | "external";
   expectedHead: string | null;
   force: boolean;
+  removal?: { branch: string | null; keepBranch: boolean };
 };
 
 export function worktrees(cwd: string): Worktree[] {
@@ -59,6 +60,14 @@ function parseEntry(value: unknown): Entry {
   if (typeof entry.force !== "boolean") {
     throw new Error("Invalid registry force flag");
   }
+  let removal: Entry["removal"];
+  if (entry.removal !== undefined) {
+    const plan = object(entry.removal, "removal plan");
+    if (phase !== "removing" || typeof plan.keepBranch !== "boolean") {
+      throw new Error("Invalid removal plan");
+    }
+    removal = { branch: nullableText(plan.branch, "removal branch"), keepBranch: plan.keepBranch };
+  }
 
   return {
     branch: text(entry.branch, "branch"),
@@ -69,6 +78,7 @@ function parseEntry(value: unknown): Entry {
     phase,
     expectedHead: nullableText(entry.expectedHead, "expectedHead"),
     force: entry.force,
+    removal,
   };
 }
 
@@ -97,7 +107,7 @@ export class Repo {
     }
 
     const state = object(JSON.parse(readFileSync(path, "utf8")), "registry");
-    if (state.version !== 1 || !Array.isArray(state.entries)) {
+    if ((state.version !== 1 && state.version !== 2) || !Array.isArray(state.entries)) {
       throw new Error("Unsupported wr registry");
     }
     this.entries = state.entries.map(parseEntry);
@@ -109,7 +119,9 @@ export class Repo {
   save() {
     mkdirSync(this.stateDir, { recursive: true });
     const path = join(this.stateDir, `state.${process.pid}.tmp`);
-    writeFileSync(path, JSON.stringify({ version: 1, entries: this.entries }, null, 2) + "\n", { mode: 0o600 });
+    // Older clients must not resume cleanup using the registered name as the deletion target.
+    const version = this.entries.some((entry) => entry.removal !== undefined) ? 2 : 1;
+    writeFileSync(path, JSON.stringify({ version, entries: this.entries }, null, 2) + "\n", { mode: 0o600 });
     renameSync(path, join(this.stateDir, "state.json"));
   }
 
@@ -143,6 +155,14 @@ export class Repo {
       throw new Error(`Not a wr worktree: ${branch}`);
     }
     return entry;
+  }
+
+  entryByNameOrBranch(name: string): Entry {
+    const registered = this.entries.find((entry) => entry.branch === name);
+    if (registered) return registered;
+    const checkout = worktrees(this.primary).find((wt) => wt.branch === name);
+    const entry = this.entries.find((entry) => entry.path === checkout?.path);
+    return entry ?? this.entry(name);
   }
 
   branch(name: string): string | null {

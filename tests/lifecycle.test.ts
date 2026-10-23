@@ -378,7 +378,7 @@ test("merge and rm always require explicit names, even inside their worktree", (
   expect(f.wr(["rm", "main", "--force"]).code).toBe(1);
 });
 
-test.each(["merge", "rm"])("%s refuses a switched branch before changing data", (action) => {
+test("merge refuses a switched branch before changing data", () => {
   const path = add();
   f.git(["switch", "-c", "different"], path);
   f.write(join(path, "tracked.txt"), "keep tracked\n");
@@ -387,7 +387,7 @@ test.each(["merge", "rm"])("%s refuses a switched branch before changing data", 
   const tabs = f.tabs();
   const head = f.git(["rev-parse", "HEAD"], path);
 
-  const result = f.wr([action, "feature", "--force"]);
+  const result = f.wr(["merge", "feature", "--force"]);
 
   expect(result.code).toBe(1);
   expect(result.err).toContain("no longer has branch");

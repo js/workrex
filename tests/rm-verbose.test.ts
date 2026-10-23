@@ -203,7 +203,7 @@ test("rm --verbose still requires exactly one name and takes no value", () => {
     expect(result.code).toBe(1);
     expect(result.out).toBe("");
     if (!args.includes("--verbose=false")) {
-      expect(result.err).toBe("wr: Usage: wr rm <name> [--force] [--verbose]\n");
+      expect(result.err).toBe("wr: Usage: wr rm <name> [--force] [--keep-branch] [--verbose]\n");
     }
   }
 });

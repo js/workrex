@@ -31,8 +31,9 @@ test.each([
     Rebase onto the default branch or --into target, fast-forward it, then remove
     the worktree, branch, and tab. --force discards uncommitted source changes.
 
-  wr rm <name> [--force] [--verbose]
-    Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.
+  wr rm <name> [--force] [--keep-branch] [--verbose]
+    Remove a worktree, its current branch, and tab; --keep-branch preserves the branch.
+    Unmerged commits require confirmation; --force discards dirty or unmerged work.
     For worktrees created outside wr, only close and unregister the tab.
     --verbose also prints each operation as it starts.
 

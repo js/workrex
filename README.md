@@ -70,7 +70,7 @@ Tabs are named `<repo>/<branch>`. `wr` tracks them by their Rex window IDs, so y
 
 Repeat `add` or `open` to focus an existing tab, even in another Rex session. If the saved tab or session is gone, `wr` creates a new tab in your current session and saves its IDs after Rex confirms it. Neither command reapplies file rules or recreates a missing worktree.
 
-`open` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree. It does not take a path. Registered names keep working after you switch branches inside the worktree. Opening does not update the registered branch, and `merge` and `rm` still refuse a managed worktree whose branch changed. It uses the merged global and primary-checkout project config. It does not create a worktree or apply copy and symlink rules. Configured pane commands run in the worktree as usual.
+`open` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree. It does not take a path. Registered names keep working after you switch branches inside the worktree. Opening does not update the registered name. `merge` still refuses a managed worktree whose branch changed; `rm` removes it using its current branch. It uses the merged global and primary-checkout project config. It does not create a worktree or apply copy and symlink rules. Configured pane commands run in the worktree as usual.
 
 Worktrees created outside `wr` are listed as `external`. For these, `wr rm` only closes the tab and forgets the entry, even with `--force`. The worktree and branch remain. `wr merge` refuses external worktrees.
 
@@ -212,7 +212,7 @@ Ignore rule destinations in Git, especially `.env`, to avoid accidental commits 
 
 ## Merge or remove work
 
-Both commands require a branch name, even when run from that worktree:
+Both commands require an explicit name, even when run from that worktree. `merge` takes the registered name; `rm` looks up the registered name first, then the current branch of a registered worktree:
 
 ```sh
 wr merge fix-login
@@ -222,7 +222,11 @@ wr rm abandoned-work
 
 For worktrees created with `wr add`, `merge` rebases the source branch onto the target, fast-forwards the target, then removes the source worktree, branch, and tab. A dirty target checkout blocks the merge. If the target has no checkout, `wr` updates its ref without switching branches in the primary checkout. The starting branch passed to `add --branch` does not change the merge target.
 
-`rm` removes the worktree, branch, and tab without merging. It refuses dirty work or commits not merged into the default branch unless you pass `--force`. Removal prints each completed step: worktree removal, branch deletion, tab closure, and registry cleanup. Retries identify resources already removed. The same progress is shown during cleanup after `merge`; deferred tab cleanup writes its progress to `cleanup.log`. Use `wr rm <name> --verbose` to also announce each operation before it starts, including safety checks, so you can see what is running or where a failure occurred. It works with `--force` and carries through to deferred cleanup.
+`rm` removes the worktree, its **currently checked-out branch**, and its tab without merging. If you switched or renamed the branch, use the same registered worktree name: a different original branch is left intact. `--keep-branch` (or `-k`) removes the worktree and tab while preserving the current branch, including unmerged commits. External worktrees remain tab-only cleanup. The primary checkout and worktrees on the default branch are protected, even with `--force` or `--keep-branch`.
+
+Dirty work and unfinished Git operations require `--force`. Unmerged commits require an interactive confirmation before branch deletion; noninteractive runs refuse unless you pass `--force` or preserve the branch with `--keep-branch`. Detached HEADs delete no branch, but unmerged detached commits still require confirmation or `--force`, even with `--keep-branch`.
+
+Removal prints each completed step: worktree removal, branch deletion, tab closure, and registry cleanup. Retries identify resources already removed. The same progress is shown during cleanup after `merge`; deferred tab cleanup writes its progress to `cleanup.log`. Use `wr rm <name> --verbose` to also announce each operation before it starts, including safety checks, so you can see what is running or where a failure occurred. It works with `--force` and carries through to deferred cleanup.
 
 **Force deletes work without another prompt.**
 
@@ -245,7 +249,7 @@ If `add` or `open` fails or is interrupted while opening a tab, inspect Rex befo
 
 If file setup fails, the entry stays `creating`. Inspect it, then use `wr rm <branch> --force` to abandon it before starting again.
 
-If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <branch>`. If closing an external tab fails, the entry stays `external`, and the same retry closes it. Background errors go to `cleanup.log` beside the registry.
+If tab closure fails after Git cleanup, the entry stays `removing`. Retry `wr rm <registered-name>` using the current version of `wr`. Cleanup remembers the selected branch, commit, and `--keep-branch` decision even after the directory is gone; it never substitutes the original branch. A retry can add `--keep-branch` to preserve a branch that has not yet been deleted. If closing an external tab fails, the entry stays `external`, and the same retry closes it. Background errors go to `cleanup.log` beside the registry.
 
 The shared Git directory contains `workrex/state.json` and `workrex/lock`. The lock prevents concurrent `wr` changes. If a killed process leaves it behind, read `workrex/lock/owner.json` and confirm the process has stopped before removing the lock directory. Never remove a live process's lock.
 

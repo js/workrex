@@ -91,31 +91,44 @@ export function merge(repo: Repo, name: string, into: string | undefined, force:
   entry.phase = "removing";
   entry.expectedHead = head;
   entry.force = false;
+  entry.removal = { branch: name, keepBranch: false };
   repo.save();
   console.log(`Rebased ${name} onto ${target} and fast-forwarded ${target}.`);
   return finishRemoval(repo, entry);
 }
 
-export function remove(repo: Repo, name: string, force: boolean, verbose = false): boolean {
+export function remove(
+  repo: Repo,
+  name: string,
+  { force = false, verbose = false, keepBranch = false }: { force?: boolean; verbose?: boolean; keepBranch?: boolean } = {},
+): boolean {
   const entry = repo.entry(name);
   if (entry.phase === "external") {
     return untrack(repo, entry, `Closed ${entry.branch}. wr did not create this worktree, so it and its branch remain.`, verbose);
   }
   if (entry.phase === "removing") {
+    if (keepBranch && !entry.removal?.keepBranch) {
+      // A retry may preserve more, but must never choose a different branch to delete.
+      entry.removal = { branch: entry.removal ? entry.removal.branch : entry.branch, keepBranch: true };
+      repo.save();
+    }
     return finishRemoval(repo, entry, verbose);
   }
   if (verbose) console.log(`Verifying worktree: ${entry.path}`);
-  repo.verify(entry);
+  const checkout = repo.verifyWorktree(entry);
+  const branchName = checkout.branch;
 
   if (verbose) console.log("Resolving default branch");
   const target = repo.defaultBranch(config(repo.primary).main_branch);
-  if (name === target) {
+  if (branchName === target) {
     throw new Error("Refusing to remove the default branch");
   }
-  if (verbose) console.log(`Resolving branch: ${name}`);
-  const head = repo.branch(name);
+  if (verbose) console.log(`Resolving branch: ${branchName ?? "(detached)"}`);
+  const head = branchName === null
+    ? git(entry.path, ["rev-parse", "--verify", "HEAD"]).out.trim()
+    : repo.branch(branchName);
   if (!head) {
-    throw new Error(`Source branch disappeared: ${name}`);
+    throw new Error(`Source branch disappeared: ${branchName}`);
   }
 
   if (verbose) console.log(`Inspecting tab: ${name}`);
@@ -127,9 +140,24 @@ export function remove(repo: Repo, name: string, force: boolean, verbose = false
     if (dirty(entry.path)) {
       throw new Error(`Worktree is dirty: ${entry.path}. --force abandons it.`);
     }
-    if (verbose) console.log(`Checking ${name} is merged into ${target}`);
-    if (git(repo.primary, ["merge-base", "--is-ancestor", head, `refs/heads/${target}`], false).code !== 0) {
-      throw new Error(`${name} has commits not merged into ${target}. --force abandons them.`);
+    // Keeping a branch preserves its commits; detached HEAD still needs a reachability check.
+    if (!keepBranch || branchName === null) {
+      const source = branchName ?? "Detached HEAD";
+      if (verbose) console.log(`Checking ${source} is merged into ${target}`);
+      const merged = git(repo.primary, ["merge-base", "--is-ancestor", head, `refs/heads/${target}`], false);
+      if (merged.code > 1) throw new Error(merged.err.trim() || "Could not check unmerged commits");
+      if (merged.code !== 0) {
+        const warning = `${source} has commits not merged into ${target}.`;
+        if (!process.stdin.isTTY) {
+          throw new Error(`${warning} Re-run interactively to confirm, or use --force to abandon them.`);
+        }
+        const action = branchName === null ? "abandon its detached commits" : `delete branch ${branchName}`;
+        const answer = prompt(`${warning}\nRemove worktree ${name} at ${entry.path} and ${action}? [y/N]`);
+        if (answer?.trim().toLowerCase() !== "y") {
+          console.log("Aborted.");
+          return false;
+        }
+      }
     }
   }
 
@@ -137,6 +165,7 @@ export function remove(repo: Repo, name: string, force: boolean, verbose = false
   entry.phase = "removing";
   entry.expectedHead = head;
   entry.force = force;
+  entry.removal = { branch: branchName, keepBranch };
   repo.save();
   return finishRemoval(repo, entry, verbose);
 }
@@ -147,15 +176,18 @@ function finishRemoval(repo: Repo, entry: Entry, verbose = false): boolean {
   if (!expected) {
     throw new Error("Incomplete removal registration; refusing cleanup");
   }
-  const branch = repo.branch(entry.branch);
-  if (branch !== null && branch !== expected) {
+  const branchName = entry.removal ? entry.removal.branch : entry.branch;
+  const keepBranch = entry.removal?.keepBranch ?? false;
+  const branch = branchName === null ? null : repo.branch(branchName);
+  if (!keepBranch && branch !== null && branch !== expected) {
     throw new Error("Source branch changed after cleanup began. Registration retained; inspect it before retrying.");
   }
 
   if (verbose) console.log(`Inspecting worktree: ${entry.path}`);
   const tree = worktrees(repo.primary).find((wt) => wt.path === entry.path);
   if (tree && !present(entry.path)) {
-    if (tree.locked || (tree.branch !== null && tree.branch !== entry.branch)) {
+    const changed = entry.removal ? tree.branch !== branchName : tree.branch !== null && tree.branch !== branchName;
+    if (tree.locked || changed) {
       throw new Error("Missing worktree registration changed after cleanup began");
     }
     if (verbose) console.log(`Removing worktree metadata: ${entry.path}`);
@@ -163,8 +195,19 @@ function finishRemoval(repo: Repo, entry: Entry, verbose = false): boolean {
     console.log(`Removed worktree metadata: ${entry.path}`);
   } else if (tree || present(entry.path)) {
     if (verbose) console.log(`Verifying worktree: ${entry.path}`);
-    repo.verify(entry);
-    if (!branch) {
+    if (entry.removal) {
+      const checkout = repo.verifyWorktree(entry);
+      if (checkout.branch !== branchName) {
+        throw new Error("Worktree branch changed after cleanup began. Registration retained; inspect it before retrying.");
+      }
+      if (git(entry.path, ["rev-parse", "--verify", "HEAD"]).out.trim() !== expected) {
+        throw new Error("Worktree HEAD changed after cleanup began. Registration retained; inspect it before retrying.");
+      }
+      if (!entry.force) requireIdle(entry.path);
+    } else {
+      repo.verify(entry);
+    }
+    if (branchName !== null && !branch) {
       throw new Error("Source branch disappeared before worktree cleanup");
     }
     if (verbose) console.log(`Removing worktree: ${entry.path}`);
@@ -174,16 +217,20 @@ function finishRemoval(repo: Repo, entry: Entry, verbose = false): boolean {
     console.log(`Worktree already removed: ${entry.path}`);
   }
 
-  if (branch) {
-    if (verbose) console.log(`Checking branch checkouts: ${entry.branch}`);
-    if (worktrees(repo.primary).some((wt) => wt.branch === entry.branch)) {
+  if (branchName === null) {
+    console.log("No branch deleted: worktree had a detached HEAD");
+  } else if (keepBranch) {
+    console.log(`${branch ? "Kept branch" : "Branch already removed"}: ${branchName}`);
+  } else if (branch) {
+    if (verbose) console.log(`Checking branch checkouts: ${branchName}`);
+    if (worktrees(repo.primary).some((wt) => wt.branch === branchName)) {
       throw new Error("Source branch is checked out elsewhere. Refusing to delete it.");
     }
-    if (verbose) console.log(`Deleting branch: ${entry.branch}`);
-    git(repo.primary, ["update-ref", "-d", `refs/heads/${entry.branch}`, expected]);
-    console.log(`Deleted branch: ${entry.branch}`);
+    if (verbose) console.log(`Deleting branch: ${branchName}`);
+    git(repo.primary, ["update-ref", "-d", `refs/heads/${branchName}`, expected]);
+    console.log(`Deleted branch: ${branchName}`);
   } else {
-    console.log(`Branch already removed: ${entry.branch}`);
+    console.log(`Branch already removed: ${branchName}`);
   }
 
   return untrack(repo, entry, `Removed ${entry.branch}.`, verbose);

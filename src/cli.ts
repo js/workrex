@@ -25,8 +25,9 @@ export async function run(args: string[]) {
         "  wr merge <name> [--into <target>] [--force]\n" +
         "    Rebase onto the default branch or --into target, fast-forward it, then remove\n" +
         "    the worktree, branch, and tab. --force discards uncommitted source changes.\n\n" +
-        "  wr rm <name> [--force] [--verbose]\n" +
-        "    Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.\n" +
+        "  wr rm <name> [--force] [--keep-branch] [--verbose]\n" +
+        "    Remove a worktree, its current branch, and tab; --keep-branch preserves the branch.\n" +
+        "    Unmerged commits require confirmation; --force discards dirty or unmerged work.\n" +
         "    For worktrees created outside wr, only close and unregister the tab.\n" +
         "    --verbose also prints each operation as it starts.\n\n" +
         "  wr ls [--verbose]\n" +
@@ -136,12 +137,12 @@ export async function run(args: string[]) {
   } else if (command === "rm") {
     const parsed = parseArgs({
       args: args.slice(1),
-      options: { force: { type: "boolean" }, verbose: { type: "boolean" } },
+      options: { force: { type: "boolean" }, "keep-branch": { type: "boolean", short: "k" }, verbose: { type: "boolean" } },
       allowPositionals: true,
       strict: true,
     });
     if (parsed.positionals.length !== 1) {
-      throw new Error("Usage: wr rm <name> [--force] [--verbose]");
+      throw new Error("Usage: wr rm <name> [--force] [--keep-branch] [--verbose]");
     }
 
     const repo = new Repo(process.cwd());
@@ -149,9 +150,15 @@ export async function run(args: string[]) {
     process.chdir(repo.primary);
 
     const verbose = parsed.values.verbose ?? false;
-    const deferred = repo.locked(() => remove(repo, name, parsed.values.force ?? false, verbose));
-    if (deferred) {
-      deferTabCleanup(repo, name, verbose);
+    const deferredName = repo.locked(() => {
+      const registeredName = repo.entryByNameOrBranch(name).branch;
+      const deferred = remove(repo, registeredName, {
+        force: parsed.values.force, keepBranch: parsed.values["keep-branch"], verbose,
+      });
+      return deferred ? registeredName : null;
+    });
+    if (deferredName) {
+      deferTabCleanup(repo, deferredName, verbose);
     }
   } else {
     throw new Error(`Unknown command: ${command}`);
