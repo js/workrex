@@ -31,9 +31,10 @@ test.each([
     Rebase onto the default branch or --into target, fast-forward it, then remove
     the worktree, branch, and tab. --force discards uncommitted source changes.
 
-  wr rm <name> [--force]
+  wr rm <name> [--force] [--verbose]
     Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.
     For worktrees created outside wr, only close and unregister the tab.
+    --verbose also prints each operation as it starts.
 
   wr ls [--verbose]
     List this repo's registered worktrees with their current branches, tab status, and state.

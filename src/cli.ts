@@ -25,9 +25,10 @@ export async function run(args: string[]) {
         "  wr merge <name> [--into <target>] [--force]\n" +
         "    Rebase onto the default branch or --into target, fast-forward it, then remove\n" +
         "    the worktree, branch, and tab. --force discards uncommitted source changes.\n\n" +
-        "  wr rm <name> [--force]\n" +
+        "  wr rm <name> [--force] [--verbose]\n" +
         "    Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.\n" +
-        "    For worktrees created outside wr, only close and unregister the tab.\n\n" +
+        "    For worktrees created outside wr, only close and unregister the tab.\n" +
+        "    --verbose also prints each operation as it starts.\n\n" +
         "  wr ls [--verbose]\n" +
         "    List this repo's registered worktrees with their current branches, tab status, and state.\n" +
         "    --verbose adds the path column.\n\n" +
@@ -135,21 +136,22 @@ export async function run(args: string[]) {
   } else if (command === "rm") {
     const parsed = parseArgs({
       args: args.slice(1),
-      options: { force: { type: "boolean" } },
+      options: { force: { type: "boolean" }, verbose: { type: "boolean" } },
       allowPositionals: true,
       strict: true,
     });
     if (parsed.positionals.length !== 1) {
-      throw new Error("Usage: wr rm <name> [--force]");
+      throw new Error("Usage: wr rm <name> [--force] [--verbose]");
     }
 
     const repo = new Repo(process.cwd());
     const name = parsed.positionals[0];
     process.chdir(repo.primary);
 
-    const deferred = repo.locked(() => remove(repo, name, parsed.values.force ?? false));
+    const verbose = parsed.values.verbose ?? false;
+    const deferred = repo.locked(() => remove(repo, name, parsed.values.force ?? false, verbose));
     if (deferred) {
-      deferTabCleanup(repo, name);
+      deferTabCleanup(repo, name, verbose);
     }
   } else {
     throw new Error(`Unknown command: ${command}`);

@@ -72,6 +72,7 @@ test("fish completes command options without treating worktree names as commands
   expect(fish("wr merge --")).toEqual(["--into", "--force"]);
   expect(fish("wr merge merge --")).toEqual(["--into", "--force"]);
   expect(fish("wr open merge --")).toEqual([]);
+  expect(fish("wr rm --")).toEqual(["--force", "--verbose"]);
   expect(fish("wr ls --")).toEqual(["--verbose"]);
   expect(fish("wr list --")).toEqual(["--verbose"]);
   expect(fish("wr ls -- --")).toEqual([]);
@@ -161,9 +162,10 @@ test("fish completion uses registered names, open extras, and branch refs", () =
   expect(fish("wr add ")).toEqual(registered);
   expect(fish("wr merge ")).toEqual(registered);
   expect(fish("wr rm feat/x ")).toEqual([]);
-  expect(fish("wr rm -")).toEqual(["--force"]);
+  expect(fish("wr rm -")).toEqual(["--force", "--verbose"]);
   expect(fish("wr rm --force ")).toEqual(registered);
-  expect(fish("wr rm feat/x -")).toEqual(["--force"]);
+  expect(fish("wr rm --verbose ")).toEqual(registered);
+  expect(fish("wr rm feat/x -")).toEqual(["--force", "--verbose"]);
   expect(fish("wr rm -- ")).toEqual(registered);
   expect(fish("wr rm -- -")).toEqual([]);
   expect(fish("wr rm merge")).toEqual(["merge"]);

@@ -60,7 +60,7 @@ function __wr_candidates
             case merge
                 printf '%s\n' --into --force
             case rm
-                printf '%s\n' --force
+                printf '%s\n' --force --verbose
             case ls list
                 printf '%s\n' --verbose
         end

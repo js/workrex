@@ -222,7 +222,7 @@ wr rm abandoned-work
 
 For worktrees created with `wr add`, `merge` rebases the source branch onto the target, fast-forwards the target, then removes the source worktree, branch, and tab. A dirty target checkout blocks the merge. If the target has no checkout, `wr` updates its ref without switching branches in the primary checkout. The starting branch passed to `add --branch` does not change the merge target.
 
-`rm` removes the worktree, branch, and tab without merging. It refuses dirty work or commits not merged into the default branch unless you pass `--force`. Removal prints each completed step: worktree removal, branch deletion, tab closure, and registry cleanup. Retries identify resources already removed. The same progress is shown during cleanup after `merge`; deferred tab cleanup writes its progress to `cleanup.log`.
+`rm` removes the worktree, branch, and tab without merging. It refuses dirty work or commits not merged into the default branch unless you pass `--force`. Removal prints each completed step: worktree removal, branch deletion, tab closure, and registry cleanup. Retries identify resources already removed. The same progress is shown during cleanup after `merge`; deferred tab cleanup writes its progress to `cleanup.log`. Use `wr rm <name> --verbose` to also announce each operation before it starts, including safety checks, so you can see what is running or where a failure occurred. It works with `--force` and carries through to deferred cleanup.
 
 **Force deletes work without another prompt.**
 
