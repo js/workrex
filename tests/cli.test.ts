@@ -37,8 +37,8 @@ test.each([
     --verbose also prints each operation as it starts.
 
   wr ls [--verbose]
-    List this repo's registered worktrees with their current branches, tab status, and state.
-    --verbose adds the path column.
+    List registered worktrees with tab status and state; differing branches appear in brackets.
+    --verbose shows separate branch and path columns.
 
   wr config check
     Check global and current-directory .jsonc files for syntax errors, not settings validity.

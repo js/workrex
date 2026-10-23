@@ -74,7 +74,7 @@ real("real Rex opens the configured split, reuses it, and recreates a closed tab
     }));
 
     rex(["window", "close", "-s", session, entry.windowId]);
-    expect(f.wr(["ls"], f.primary, overrides).out).toMatch(/layout +layout +closed/);
+    expect(f.wr(["ls"], f.primary, overrides).out).toMatch(/layout +closed/);
     expect(f.wr(["add", "layout"], f.primary, overrides).code).toBe(0);
     const reopenedId = f.state().entries[0].windowId;
     expect(reopenedId).not.toBe(entry.windowId);
@@ -120,7 +120,7 @@ real.each(["tab", "session"])("real Rex reuses another session's live tab and re
     const listed = f.wr(["ls"], f.primary, fromCaller);
     expect(listed.err).toBe("");
     expect(listed.code).toBe(0);
-    expect(listed.out).toMatch(/shared +shared +open +ready/);
+    expect(listed.out).toMatch(/shared +open +ready/);
 
     if (missing === "session") {
       rex(["kill", owner]);
@@ -128,7 +128,7 @@ real.each(["tab", "session"])("real Rex reuses another session's live tab and re
     } else {
       rex(["window", "close", "-s", owner, entry.windowId]);
     }
-    expect(f.wr(["ls"], f.primary, fromCaller).out).toMatch(/shared +shared +closed +ready/);
+    expect(f.wr(["ls"], f.primary, fromCaller).out).toMatch(/shared +closed +ready/);
     const reopened = f.wr(["open", "shared"], f.primary, fromCaller);
     expect(reopened.err).toBe("");
     expect(reopened.code).toBe(0);

@@ -22,6 +22,7 @@ test.each(modes)("$command aligns columns (verbose=$verbose)", ({ command, verbo
   const external = join(f.root, "external worktree");
   f.git(["worktree", "add", "-b", "修正", external]);
   expect(f.wr(["open", "修正"]).code).toBe(0);
+  f.git(["switch", "-c", "更新/修正"], external);
 
   const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
   store.tabs = store.tabs.filter((tab: { cwd: string }) => tab.cwd !== f.path("swift"));
@@ -35,13 +36,13 @@ test.each(modes)("$command aligns columns (verbose=$verbose)", ({ command, verbo
     `rex-inversion  rex-inversion  open    ready     ${f.path("rex-inversion")}`,
     `swift          new/topic      closed  ready     ${f.path("swift")}`,
     `gone           gone           open    missing   ${f.path("gone")}`,
-    `修正           修正           open    external  ${external}`,
+    `修正           更新/修正      open    external  ${external}`,
   ] : [
-    "WORKTREE       BRANCH         TAB     STATE",
-    "rex-inversion  rex-inversion  open    ready",
-    "swift          new/topic      closed  ready",
-    "gone           gone           open    missing",
-    "修正           修正           open    external",
+    "WORKTREE           TAB     STATE",
+    "rex-inversion      open    ready",
+    "swift [new/topic]  closed  ready",
+    "gone               open    missing",
+    "修正 [更新/修正]   open    external",
   ];
   expect(result).toEqual({ code: 0, err: "", out: expected.join("\n") + "\n" });
   expect(f.state()).toEqual(stateBefore);
@@ -51,11 +52,11 @@ test.each(modes)("$command prints headers for an empty registry (verbose=$verbos
   expect(f.wr([command, ...(verbose ? ["--verbose"] : [])])).toEqual({
     code: 0,
     err: "",
-    out: verbose ? "WORKTREE  BRANCH  TAB  STATE  PATH\n" : "WORKTREE  BRANCH  TAB  STATE\n",
+    out: verbose ? "WORKTREE  BRANCH  TAB  STATE  PATH\n" : "WORKTREE  TAB  STATE\n",
   });
 });
 
-test("ls distinguishes detached HEADs from unavailable branch information", () => {
+test.each([false, true])("ls distinguishes detached HEADs from unavailable branch information (verbose=%s)", (verbose) => {
   for (const name of ["topic", "gone"]) {
     expect(f.wr(["add", name]).code).toBe(0);
   }
@@ -64,14 +65,18 @@ test("ls distinguishes detached HEADs from unavailable branch information", () =
   f.git(["worktree", "prune"]);
 
   const stateBefore = f.state();
-  expect(f.wr(["ls"])).toEqual({
+  expect(f.wr(["ls", ...(verbose ? ["--verbose"] : [])])).toEqual({
     code: 0,
     err: "",
-    out: [
-      "WORKTREE  BRANCH      TAB   STATE",
-      "topic     (detached)  open  ready",
-      "gone      -           open  missing",
-    ].join("\n") + "\n",
+    out: (verbose ? [
+      "WORKTREE  BRANCH      TAB   STATE    PATH",
+      `topic     (detached)  open  ready    ${f.path("topic")}`,
+      `gone      -           open  missing  ${f.path("gone")}`,
+    ] : [
+      "WORKTREE            TAB   STATE",
+      "topic [(detached)]  open  ready",
+      "gone [-]            open  missing",
+    ]).join("\n") + "\n",
   });
   expect(f.state()).toEqual(stateBefore);
 });

@@ -30,8 +30,8 @@ export async function run(args: string[]) {
         "    For worktrees created outside wr, only close and unregister the tab.\n" +
         "    --verbose also prints each operation as it starts.\n\n" +
         "  wr ls [--verbose]\n" +
-        "    List this repo's registered worktrees with their current branches, tab status, and state.\n" +
-        "    --verbose adds the path column.\n\n" +
+        "    List registered worktrees with tab status and state; differing branches appear in brackets.\n" +
+        "    --verbose shows separate branch and path columns.\n\n" +
         "  wr config check\n" +
         "    Check global and current-directory .jsonc files for syntax errors, not settings validity.\n\n" +
         "  wr completions fish\n" +

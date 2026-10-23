@@ -205,8 +205,9 @@ function currentSession(): string {
 }
 
 export function list(repo: Repo, options: { verbose?: boolean } = {}) {
-  const headers = ["WORKTREE", "BRANCH", "TAB", "STATE"];
-  if (options.verbose) headers.push("PATH");
+  const headers = options.verbose
+    ? ["WORKTREE", "BRANCH", "TAB", "STATE", "PATH"]
+    : ["WORKTREE", "TAB", "STATE"];
   const trees = new Map(worktrees(repo.primary).map((wt) => [wt.path, wt]));
   const rows = [headers, ...repo.entries.map((entry) => {
     const status = inspectTab(entry);
@@ -214,8 +215,8 @@ export function list(repo: Repo, options: { verbose?: boolean } = {}) {
     const state = present(entry.path) ? entry.phase : "missing";
     const wt = trees.get(entry.path);
     const branch = wt ? wt.branch ?? "(detached)" : "-";
-    const row = [entry.branch, branch, tab, state];
-    return options.verbose ? [...row, entry.path] : row;
+    const name = branch === entry.branch ? entry.branch : `${entry.branch} [${branch}]`;
+    return options.verbose ? [entry.branch, branch, tab, state, entry.path] : [name, tab, state];
   })];
   const widths = headers.map((_, column) =>
     rows.reduce((width, row) => Math.max(width, Bun.stringWidth(row[column])), 0),

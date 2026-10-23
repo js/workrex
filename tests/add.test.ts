@@ -40,7 +40,7 @@ test("renamed tabs are still reused by their saved window ID", () => {
 
   add("renamed");
   expect(f.tabs()).toEqual(store.tabs);
-  expect(f.wr(["ls"]).out).toMatch(/renamed +renamed +open +ready/);
+  expect(f.wr(["ls"]).out).toMatch(/renamed +open +ready/);
 });
 
 test("legacy registry labels are ignored and reopened tabs get plain titles", () => {
@@ -171,7 +171,7 @@ test("closed tabs are reopened", () => {
   const store = JSON.parse(readFileSync(f.env.WR_FAKE_STORE, "utf8"));
   store.tabs = [];
   writeFileSync(f.env.WR_FAKE_STORE, JSON.stringify(store));
-  expect(f.wr(["ls"]).out).toMatch(/reopen +reopen +closed +ready/);
+  expect(f.wr(["ls"]).out).toMatch(/reopen +closed +ready/);
 
   add("reopen");
   expect(f.tabs()).toHaveLength(1);
@@ -213,7 +213,7 @@ test.each(["open-after", "select-after"])("unconfirmed creation reports manual c
   expect(result.err).not.toContain("wr add");
   expect(f.state().entries[0].windowId).toBeNull();
   const orphan = f.tabs()[0];
-  expect(f.wr(["ls"]).out).toMatch(/unconfirmed +unconfirmed +closed +ready/);
+  expect(f.wr(["ls"]).out).toMatch(/unconfirmed +closed +ready/);
 
   add("unconfirmed");
   expect(f.tabs()).toHaveLength(2);
@@ -256,7 +256,7 @@ test("ls is repository scoped and retains missing worktrees", () => {
   }
 
   rmSync(f.path("mine"), { recursive: true });
-  expect(f.wr(["ls"]).out).toMatch(/mine +mine +open +missing/);
+  expect(f.wr(["ls"]).out).toMatch(/mine +open +missing/);
   expect(f.wr(["add", "mine"]).err).toContain("missing");
 });
 
