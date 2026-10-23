@@ -35,8 +35,9 @@ test.each([
     Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.
     For worktrees created outside wr, only close and unregister the tab.
 
-  wr ls
-    List this repo's registered worktrees with their paths, tab status, and state.
+  wr ls [--verbose]
+    List this repo's registered worktrees with their current branches, tab status, and state.
+    --verbose adds the path column.
 
   wr config check
     Check global and current-directory .jsonc files for syntax errors, not settings validity.

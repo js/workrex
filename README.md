@@ -74,7 +74,7 @@ Repeat `add` or `open` to focus an existing tab, even in another Rex session. If
 
 Worktrees created outside `wr` are listed as `external`. For these, `wr rm` only closes the tab and forgets the entry, even with `--force`. The worktree and branch remain. `wr merge` refuses external worktrees.
 
-`ls`, also spelled `list`, shows this repo's registered worktrees, including closed tabs and missing directories.
+`ls`, also spelled `list`, shows this repo's registered worktrees in aligned columns: `WORKTREE`, `BRANCH`, `TAB`, and `STATE`, including closed tabs and missing directories. `WORKTREE` is the registered name; `BRANCH` is the current Git branch, which may differ after switching branches. Detached HEADs show `(detached)`; unavailable branch information shows `-`. Use `wr ls --verbose` to also show the `PATH` column.
 
 ## Configure
 

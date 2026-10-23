@@ -72,6 +72,9 @@ test("fish completes command options without treating worktree names as commands
   expect(fish("wr merge --")).toEqual(["--into", "--force"]);
   expect(fish("wr merge merge --")).toEqual(["--into", "--force"]);
   expect(fish("wr open merge --")).toEqual([]);
+  expect(fish("wr ls --")).toEqual(["--verbose"]);
+  expect(fish("wr list --")).toEqual(["--verbose"]);
+  expect(fish("wr ls -- --")).toEqual([]);
   expect(fish("wr add -- --")).toEqual([]);
   expect(fish("wr add --pr --")).toEqual([]);
   expect(fish("wr rm --branch ")).toEqual([]);

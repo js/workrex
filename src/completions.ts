@@ -61,6 +61,8 @@ function __wr_candidates
                 printf '%s\n' --into --force
             case rm
                 printf '%s\n' --force
+            case ls list
+                printf '%s\n' --verbose
         end
         return
     end

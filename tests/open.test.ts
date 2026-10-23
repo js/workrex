@@ -58,7 +58,7 @@ test("open registers an existing worktree and builds panes from project config",
   ]);
   expect(f.state().entries[0].phase).toBe("external");
   expect(f.state().entries[0]).not.toHaveProperty("identity");
-  expect(f.wr(["ls"]).out).toContain(`ext\topen\texternal\t${path}`);
+  expect(f.wr(["ls", "--verbose"]).out).toContain(`ext       ext     open  external  ${path}`);
 });
 
 test("repeat open focuses the tab, and a closed tab rebuilds from current project panes", () => {

@@ -28,8 +28,9 @@ export async function run(args: string[]) {
         "  wr rm <name> [--force]\n" +
         "    Remove a worktree, branch, and tab without merging; --force discards dirty or unmerged work.\n" +
         "    For worktrees created outside wr, only close and unregister the tab.\n\n" +
-        "  wr ls\n" +
-        "    List this repo's registered worktrees with their paths, tab status, and state.\n\n" +
+        "  wr ls [--verbose]\n" +
+        "    List this repo's registered worktrees with their current branches, tab status, and state.\n" +
+        "    --verbose adds the path column.\n\n" +
         "  wr config check\n" +
         "    Check global and current-directory .jsonc files for syntax errors, not settings validity.\n\n" +
         "  wr completions fish\n" +
@@ -64,10 +65,19 @@ export async function run(args: string[]) {
     }
     checkConfig(process.cwd());
   } else if (command === "ls" || command === "list") {
-    if (args.length !== 1) {
-      throw new Error("Usage: wr ls");
+    let verbose: boolean;
+    try {
+      const parsed = parseArgs({
+        args: args.slice(1),
+        options: { verbose: { type: "boolean" } },
+        allowPositionals: false,
+        strict: true,
+      });
+      verbose = parsed.values.verbose ?? false;
+    } catch {
+      throw new Error("Usage: wr ls [--verbose]");
     }
-    list(new Repo(process.cwd()));
+    list(new Repo(process.cwd()), { verbose });
   } else if (command === "add") {
     const parsed = parseArgs({
       args: args.slice(1),

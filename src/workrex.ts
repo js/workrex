@@ -204,12 +204,25 @@ function currentSession(): string {
   return process.env.REX_SESSION;
 }
 
-export function list(repo: Repo) {
-  console.log("BRANCH\tTAB\tSTATE\tPATH");
-  for (const entry of repo.entries) {
+export function list(repo: Repo, options: { verbose?: boolean } = {}) {
+  const headers = ["WORKTREE", "BRANCH", "TAB", "STATE"];
+  if (options.verbose) headers.push("PATH");
+  const trees = new Map(worktrees(repo.primary).map((wt) => [wt.path, wt]));
+  const rows = [headers, ...repo.entries.map((entry) => {
     const status = inspectTab(entry);
     const tab = status.windowId ? "open" : "closed";
     const state = present(entry.path) ? entry.phase : "missing";
-    console.log(`${entry.branch}\t${tab}\t${state}\t${entry.path}`);
+    const wt = trees.get(entry.path);
+    const branch = wt ? wt.branch ?? "(detached)" : "-";
+    const row = [entry.branch, branch, tab, state];
+    return options.verbose ? [...row, entry.path] : row;
+  })];
+  const widths = headers.map((_, column) =>
+    rows.reduce((width, row) => Math.max(width, Bun.stringWidth(row[column])), 0),
+  );
+  for (const row of rows) {
+    console.log(row.map((cell, column) =>
+      column === row.length - 1 ? cell : cell + " ".repeat(widths[column] - Bun.stringWidth(cell)),
+    ).join("  "));
   }
 }
