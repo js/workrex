@@ -61,7 +61,7 @@ test("completions fish is a constant script with no repo names", () => {
 
   const help = f.wr(["--help"], f.root);
   const documented = [...new Set([...help.out.matchAll(/^  wr ([a-z]+)/gm)].map((match) => match[1]))];
-  expect(documented).toEqual(["add", "open", "merge", "rm", "ls", "config", "completions"]);
+  expect(documented).toEqual(["add", "open", "sync", "merge", "rm", "ls", "config", "completions"]);
   expect(fish("wr ", f.root).sort()).toEqual([...documented, "list"].sort());
 });
 
@@ -75,6 +75,8 @@ test("fish completes command options without treating worktree names as commands
   expect(fish("wr rm --")).toEqual(["--force", "--keep-branch", "--verbose"]);
   expect(fish("wr ls --")).toEqual(["--verbose"]);
   expect(fish("wr list --")).toEqual(["--verbose"]);
+  expect(fish("wr sync ")).toEqual([]);
+  expect(fish("wr sync --")).toEqual(["--branch"]);
   expect(fish("wr ls -- --")).toEqual([]);
   expect(fish("wr add -- --")).toEqual([]);
   expect(fish("wr add --pr --")).toEqual([]);
@@ -183,6 +185,8 @@ test("fish completion uses registered names, open extras, and branch refs", () =
   expect(fish("wr merge feat/x --into ")).toEqual(heads);
   expect(heads).toContain("main");
   expect(fish("wr add --branch ")).toEqual(heads);
+  expect(fish("wr sync --branch ")).toEqual(heads);
+  expect(fish("wr sync --branch main ")).toEqual([]);
   expect(fish("wr add --branch ")).toContain("other");
   expect(fish("wr add --branch other ")).toEqual(registered);
   expect(fish("wr add --pr ")).toEqual([]);

@@ -51,13 +51,16 @@ Commands run in the worktree through Rex's default interactive shell; that shell
 
 ## File rules
 
-Rules use literal relative paths, not globs. Sources come from the primary checkout, destinations use the same path in a **new** worktree. Missing sources are skipped.
+Rules use literal relative paths, not globs. Initial `wr add` setup uses the invoking checkout, or the checkout of an explicit `add --branch` source. `--pr` uses the invoking checkout for files. `wr sync` instead uses the checkout of literal local branch `main`, or `sync --branch <source>` for that invocation. Project config still comes from the primary checkout. Destinations use the same relative paths. Missing sources are skipped without removing existing targets.
 
-- Copy once for independent files such as `.env`; symlink only when changes should be shared with the primary checkout.
-- Ignore destinations in Git, especially secrets. Check whether paths are already tracked and whether the intended destination branch ignores them; an existing tracked destination will block setup. Do not read secret contents to check file presence.
-- Paths cannot be absolute or contain empty, `.`, `..`, or `.git` components. Sources must resolve inside the primary checkout.
-- Active rules cannot duplicate or contain one another across either list. Existing destinations are rejected rather than overwritten.
-- Copy sources cannot contain symlinks or Git metadata. Dependency directories such as `node_modules` commonly need a symlink rule instead. Explain that installing dependencies through that link changes the primary checkout too.
+- `add --branch` with no checkout is allowed only when no file rules are configured. Sync always requires exactly one available checkout for its selected source branch. It does not remember earlier source selections, infer parents, or change registry format.
+- Copy for independent files such as `.env`; symlink when changes should be shared with the parent. A parent's symlink may itself point into another checkout of the same repository.
+- Ignore destinations in Git, especially secrets. An existing tracked destination blocks `add`, but `sync` overwrites copy targets even when tracked or locally edited. Check file presence without reading secret contents.
+- Paths cannot be absolute or contain empty, `.`, `..`, or `.git` components. Copy sources must resolve inside the source checkout; symlink sources may resolve into other checkouts of the same repository, outside the destination and Git metadata.
+- Active rules cannot duplicate or contain one another across either list. `add` rejects all existing destinations.
+- `wr sync` reapplies rules in the current managed worktree. Copies replace targets entirely, including directory-only local files. Destination symlinks are replaced rather than followed. Symlinks already pointing to the selected source path are silently preserved; conflicting symlinks or other existing targets for symlink rules are refused before copying, even when changing `--branch`.
+- Sync refuses symlinked destination ancestors and copy targets containing Git metadata. It also refuses primary, external, unfinished, and self-source worktrees. Existing managed worktrees need no migration. Report source errors rather than switching branches or creating checkouts automatically.
+- Copy sources cannot contain symlinks or Git metadata. Dependency directories such as `node_modules` commonly need a symlink rule instead. Installing dependencies through that link changes the parent too.
 
 ## Default branch
 
@@ -93,19 +96,25 @@ A project with its own `panes` remains unchanged. To use one pane, replace the f
 
 ## Read-only validation
 
-Workrex has no `config check`, `config set`, or dry-run CLI. Validate with the installed loader rather than inventing one or using `add` as a probe.
+`wr config check` checks JSONC syntax only. For settings and file-source validation, use the installed loader rather than `add` or `sync` as a probe; both can mutate files.
 
-Resolve the installed `wr` symlink to its checkout; set `workrex` to that directory (containing `src/config.ts` and `src/repo.ts`), and `checkout` to the target repository or any of its worktrees. Then run:
+Resolve the installed `wr` symlink to its checkout; set `workrex` to that directory, and `checkout` to the directory from which a new default `add` would run. This checks that invoking checkout as the source. For `--branch`, pass its name to `sourceCheckout`. For sync, use `sourceCheckout(repo, "main")` (or the explicit branch) and `planFiles(repo, source, entry.path, cfg)` from `src/files.ts`.
+
+For a new default `add`, run:
 
 ```sh
 bun -e '
 const { config, fileRules } = await import(process.argv[1] + "/src/config.ts");
-const { Repo } = await import(process.argv[1] + "/src/repo.ts");
+const { Repo, worktrees } = await import(process.argv[1] + "/src/repo.ts");
+const { sourceCheckout } = await import(process.argv[1] + "/src/files.ts");
+const { existsSync, realpathSync } = await import("node:fs");
 const repo = new Repo(process.argv[2]);
 const cfg = config(repo.primary);
-const activeRules = fileRules(repo.primary, cfg);
+const source = sourceCheckout(repo);
+const roots = worktrees(repo.primary).filter(wt => existsSync(wt.path)).map(wt => realpathSync(wt.path));
+const activeRules = fileRules(source, cfg, roots);
 if (cfg.main_branch !== undefined) repo.defaultBranch(cfg.main_branch);
-console.log(JSON.stringify({ primary: repo.primary, effective: cfg, activeRules }, null, 2));
+console.log(JSON.stringify({ primary: repo.primary, source, effective: cfg, activeRules }, null, 2));
 ' "$workrex" "$checkout"
 ```
 

@@ -1,6 +1,6 @@
 # workrex
 
-`wr` creates Git worktrees and opens each in a Rex tab. Run `wr add new-feature` to start your editor and coding agent side by side. Configure other pane commands, copy `.env`, or symlink `node_modules` from your primary checkout.
+`wr` creates Git worktrees and opens each in a Rex tab. Run `wr add new-feature` to start your editor and coding agent side by side. Configure other pane commands, copy `.env`, or symlink `node_modules` from the new worktree's parent checkout.
 
 [workmux](https://github.com/raine/workmux) for tmux inspired this tool. Thanks to workmux's authors and contributors.
 
@@ -68,7 +68,7 @@ Worktrees created with `add` live beside the primary checkout in `<repo>__worktr
 
 Tabs are named `<repo>/<branch>`. `wr` tracks them by their Rex window IDs, so you can rename them.
 
-Repeat `add` or `open` to focus an existing tab, even in another Rex session. If the saved tab or session is gone, `wr` creates a new tab in your current session and saves its IDs after Rex confirms it. Neither command reapplies file rules or recreates a missing worktree.
+Repeat `add` or `open` to focus an existing tab, even in another Rex session. If the saved tab or session is gone, `wr` creates a new tab in your current session and saves its IDs after Rex confirms it. Neither command reapplies file rules or recreates a missing worktree. Use `wr sync` inside the worktree to reapply file rules.
 
 `open` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree. It does not take a path. Registered names keep working after you switch branches inside the worktree. Opening does not update the registered name. `merge` still refuses a managed worktree whose branch changed; `rm` removes it using its current branch. It uses the merged global and primary-checkout project config. It does not create a worktree or apply copy and symlink rules. Configured pane commands run in the worktree as usual.
 
@@ -122,8 +122,8 @@ This is a syntax-only check of those two `.jsonc` files, not a validation of Wor
 | Option | Type | Default | Purpose |
 | --- | --- | --- | --- |
 | `panes` | Nonempty array of pane objects | See below | Commands and layout for new tabs |
-| `files.copy` | Array of relative paths | `[]` | Copy files or directories from the primary checkout |
-| `files.symlink` | Array of relative paths | `[]` | Link files or directories to the primary checkout |
+| `files.copy` | Array of relative paths | `[]` | Copy files or directories from the source checkout |
+| `files.symlink` | Array of relative paths | `[]` | Link files or directories to the source checkout |
 | `main_branch` | Nonempty string | Auto-detected | Default merge target and branch used by `rm` to check for unmerged commits |
 
 The built-in config runs `nvim .` and `pi` side by side, with 40 percent of the space and focus on `pi`:
@@ -198,11 +198,29 @@ After you update `wr`, run `rex config reload`. Rex keeps using the `rex/wr.lua`
 
 ### File rules
 
-Paths name files or directories relative to the primary checkout, not glob patterns. Each destination uses the same relative path in the new worktree.
+Paths name files or directories relative to the **source checkout**, not glob patterns. Each destination uses the same relative path in the worktree. Project config still comes from the primary checkout.
 
-Copies happen once at worktree creation and remain independent. Symlinks share the source, so changes through a linked `node_modules` affect the primary checkout too.
+For initial file setup, `wr add` uses the invoking checkout, including with `--pr` or an existing branch. With `add --branch <source>`, it uses that branch's checkout instead. If that branch has no checkout, `add` can proceed only with no file rules. No parent information is stored.
 
-`wr add` skips copy and symlink rules whose sources are missing. For the remaining rules, `wr` rejects existing destinations and overlaps. Sources must resolve inside the primary checkout. Paths cannot be absolute or contain `.`, `..`, or `.git` components. Copy sources cannot contain symlinks or Git metadata. Use a symlink rule for directories containing symlinks.
+Copies remain independent after creation. Symlinks point to the parent's path, so changes through a linked `node_modules` affect the parent too. A parent's symlink may itself point into another checkout of the same repository, preserving sharing through nested worktrees.
+
+`wr add` skips rules whose sources are missing, and rejects existing destinations and overlapping rules. Paths cannot be absolute or contain empty, `.`, `..`, or `.git` components. Copy sources must resolve inside the source checkout and cannot contain symlinks or Git metadata. Symlink sources must resolve inside this repository's checkouts, outside the destination worktree and Git metadata. Use a symlink rule for directories containing symlinks.
+
+#### Reapply file rules
+
+```sh
+cd ../my-repo__worktrees/my-feature
+wr sync                       # Copy/link from the checkout of main
+wr sync --branch develop      # Use develop's checkout for this invocation
+```
+
+`wr sync` runs in the current managed worktree (or any subdirectory), using the current merged global/project config. It defaults to the literal local branch `main`, regardless of `main_branch` config or which checkout created the worktree. `--branch <source>` overrides the source for one invocation. The selected branch must have exactly one available checkout; `sync` never switches, creates, or fetches a branch. It needs no Rex session and does not open tabs.
+
+- Copies **overwrite existing targets**, including tracked files and local edits. Directory targets are replaced entirely, not merged; destination-only files are removed. Destination symlinks are replaced rather than followed.
+- Symlinks already pointing to the selected source path are silently left alone, including equivalent relative links. Other existing symlinks, files, or directories at a symlink destination cause an error before any copies are changed. Changing `--branch` does not automatically replace links to a different source.
+- Missing sources are skipped, leaving any existing targets unchanged. Removing a rule from config does not remove its old target.
+- Symlinked destination ancestors and copy targets containing Git metadata are refused.
+- Primary, external, and unfinished worktrees are refused, as is syncing a checkout from itself. Existing managed worktrees are supported without migration or new registry metadata.
 
 Ignore rule destinations in Git, especially `.env`, to avoid accidental commits and untracked changes.
 

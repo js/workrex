@@ -167,7 +167,7 @@ export function present(path: string): boolean {
 
 export type FileRule = { kind: "copy" | "symlink"; path: string };
 
-export function fileRules(primary: string, cfg: Config): FileRule[] {
+export function fileRules(root: string, cfg: Config, symlinkRoots: string[] = [root]): FileRule[] {
   const rules: FileRule[] = [
     ...cfg.files.copy.map((path): FileRule => ({ kind: "copy", path })),
     ...cfg.files.symlink.map((path): FileRule => ({ kind: "symlink", path })),
@@ -177,12 +177,14 @@ export function fileRules(primary: string, cfg: Config): FileRule[] {
       throw new Error(`Unsafe file rule: ${rule.path}`);
     }
 
-    const source = join(primary, rule.path);
+    const source = join(root, rule.path);
     if (!present(source)) {
       return false;
     }
-    if (!inside(primary, realpathSync(source))) {
-      throw new Error(`File-rule source escapes primary checkout: ${source}`);
+    const resolved = realpathSync(source);
+    const roots = rule.kind === "symlink" ? symlinkRoots : [root];
+    if (!roots.some((root) => inside(root, resolved) && !relative(root, resolved).split(sep).includes(".git"))) {
+      throw new Error(`File-rule source escapes source checkout or contains Git metadata: ${source}`);
     }
     if (rule.kind === "copy") {
       checkCopy(source);

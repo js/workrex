@@ -27,6 +27,9 @@ test.each([
   wr open <name>
     Focus or reopen a Rex tab for an existing worktree, including one created outside wr.
 
+  wr sync [--branch <source>]
+    Reapply file rules from the checkout of main or --branch, overwriting copies.
+
   wr merge <name> [--into <target>] [--force]
     Rebase onto the default branch or --into target, fast-forward it, then remove
     the worktree, branch, and tab. --force discards uncommitted source changes.

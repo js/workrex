@@ -11,7 +11,7 @@ end
 function __wr_candidates
     set -l tokens (commandline -opc)
     if test (count $tokens) -lt 2
-        printf '%s\n' add open merge rm ls list config completions
+        printf '%s\n' add open sync merge rm ls list config completions
         return
     end
 
@@ -44,7 +44,7 @@ function __wr_candidates
     end
 
     switch "$sub/$taking"
-        case add/branch merge/into
+        case add/branch sync/branch merge/into
             __wr_names branches
             return
     end
@@ -57,6 +57,8 @@ function __wr_candidates
         switch $sub
             case add
                 printf '%s\n' --branch --pr
+            case sync
+                printf '%s\n' --branch
             case merge
                 printf '%s\n' --into --force
             case rm

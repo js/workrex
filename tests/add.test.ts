@@ -92,7 +92,7 @@ test("add refuses unmanaged worktrees and path collisions", () => {
   expect(readFileSync(f.path("taken"), "utf8")).toBe("do not overwrite");
 });
 
-test("copy and symlink rules use the primary checkout, and arrays replace global defaults", () => {
+test("copy and symlink rules use the parent checkout, and arrays replace global defaults", () => {
   f.global({ files: { copy: ["global.txt"], symlink: ["secret.txt"] }, panes: [{ command: ["sh"] }] });
   f.local({ files: { copy: [".env"] } });
   f.write(join(f.primary, "global.txt"), "global\n");
@@ -110,7 +110,8 @@ test("copy and symlink rules use the primary checkout, and arrays replace global
   f.write(join(first, ".env"), "worktree\n");
   const second = f.wr(["add", "second"], first);
   expect(second.code).toBe(0);
-  expect(readFileSync(join(f.path("second"), ".env"), "utf8")).toBe("primary\n");
+  expect(readFileSync(join(f.path("second"), ".env"), "utf8")).toBe("worktree\n");
+  expect(readlinkSync(join(f.path("second"), "secret.txt"))).toBe(join(first, "secret.txt"));
 
   add("first");
   expect(readFileSync(join(first, ".env"), "utf8")).toBe("worktree\n");
@@ -160,7 +161,7 @@ test("file rules refuse traversal, symlink escapes, and overlap", () => {
   f.write(join(f.root, "outside"), "private");
   symlinkSync(join(f.root, "outside"), join(f.primary, "link"));
   f.local({ files: { symlink: ["link"] } });
-  expect(f.wr(["add", "escape"]).err).toContain("escapes primary");
+  expect(f.wr(["add", "escape"]).err).toContain("escapes source");
 
   f.local({ files: { copy: ["tracked.txt"], symlink: ["tracked.txt"] } });
   expect(f.wr(["add", "escape"]).err).toContain("Overlapping");

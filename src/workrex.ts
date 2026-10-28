@@ -1,41 +1,10 @@
-import { constants, cpSync, mkdirSync, realpathSync, symlinkSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
-import { config, fileRules, inside, present, type FileRule } from "./config";
+import { realpathSync } from "node:fs";
+import { basename } from "node:path";
+import { config, present } from "./config";
+import { installFiles, planFiles, sourceCheckout } from "./files";
 import { git, Repo, validateBranch, worktreePath, worktrees, type Entry } from "./repo";
 import { inspectTab, openTab } from "./rex";
 import { gh, pullRequest } from "./github";
-
-function installFiles(primary: string, destination: string, rules: FileRule[]) {
-  for (const rule of rules) {
-    const path = join(destination, rule.path);
-    if (present(path)) {
-      throw new Error(`File-rule destination already exists: ${path}`);
-    }
-
-    let parent = dirname(path);
-    while (!present(parent)) {
-      parent = dirname(parent);
-    }
-    if (!inside(destination, realpathSync(parent))) {
-      throw new Error(`File-rule destination escapes worktree: ${path}`);
-    }
-  }
-
-  for (const rule of rules) {
-    const path = join(destination, rule.path);
-    mkdirSync(dirname(path), { recursive: true });
-    if (!inside(destination, realpathSync(dirname(path)))) {
-      throw new Error(`File-rule destination escapes worktree: ${path}`);
-    }
-
-    const source = join(primary, rule.path);
-    if (rule.kind === "symlink") {
-      symlinkSync(source, path);
-    } else {
-      cpSync(source, path, { recursive: true, force: false, errorOnExist: true, mode: constants.COPYFILE_EXCL });
-    }
-  }
-}
 
 function show(repo: Repo, entry: Entry) {
   const cfg = config(repo.primary);
@@ -108,7 +77,8 @@ export function add(repo: Repo, name: string | undefined, options: { branch?: st
     start = `refs/heads/${source}`;
   }
   const startHead = pr?.head ?? git(repo.cwd, ["rev-parse", "--verify", `${start}^{commit}`]).out.trim();
-  const rules = fileRules(repo.primary, cfg);
+  const files = cfg.files.copy.length || cfg.files.symlink.length
+    ? planFiles(repo, sourceCheckout(repo, source), path, cfg) : null;
 
   const entry: Entry = {
     branch: name,
@@ -155,13 +125,28 @@ export function add(repo: Repo, name: string | undefined, options: { branch?: st
   entry.gitDir = realpathSync(git(path, ["rev-parse", "--absolute-git-dir"]).out.trim());
   repo.save();
 
-  installFiles(repo.primary, path, rules);
+  if (files) installFiles(files);
   entry.phase = "ready";
   repo.save();
 
   entry.windowId = openTab(entry, cfg.panes, label);
   repo.save();
   console.log(`${name}\t${path}\topen`);
+}
+
+export function sync(repo: Repo, branch = "main") {
+  const path = realpathSync(git(repo.cwd, ["rev-parse", "--show-toplevel"]).out.trim());
+  const entry = repo.entries.find((item) => item.path === path);
+  if (!entry || entry.phase === "external") {
+    throw new Error("Run wr sync inside a worktree created with wr add");
+  }
+  if (entry.phase !== "ready") {
+    throw new Error(`${entry.branch} has unfinished ${entry.phase} work; cannot sync files`);
+  }
+  repo.verifyWorktree(entry);
+  const files = planFiles(repo, sourceCheckout(repo, branch), entry.path, config(repo.primary));
+  installFiles(files, true);
+  console.log(`${entry.branch}\t${entry.path}\tsynced`);
 }
 
 export function open(repo: Repo, name: string) {

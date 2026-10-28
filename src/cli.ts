@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Repo } from "./repo";
 import { checkConfig } from "./config";
 import { completionNames, fishScript } from "./completions";
-import { add, list, open } from "./workrex";
+import { add, list, open, sync } from "./workrex";
 import { deferTabCleanup, merge, remove } from "./lifecycle";
 
 export async function run(args: string[]) {
@@ -22,6 +22,8 @@ export async function run(args: string[]) {
         "    Defaults to the PR's branch name; cannot be combined with --branch.\n\n" +
         "  wr open <name>\n" +
         "    Focus or reopen a Rex tab for an existing worktree, including one created outside wr.\n\n" +
+        "  wr sync [--branch <source>]\n" +
+        "    Reapply file rules from the checkout of main or --branch, overwriting copies.\n\n" +
         "  wr merge <name> [--into <target>] [--force]\n" +
         "    Rebase onto the default branch or --into target, fast-forward it, then remove\n" +
         "    the worktree, branch, and tab. --force discards uncommitted source changes.\n\n" +
@@ -96,6 +98,21 @@ export async function run(args: string[]) {
 
     const repo = new Repo(process.cwd());
     repo.locked(() => add(repo, parsed.positionals[0], parsed.values));
+  } else if (command === "sync") {
+    let branch: string | undefined;
+    try {
+      const parsed = parseArgs({
+        args: args.slice(1),
+        options: { branch: { type: "string" } },
+        allowPositionals: false,
+        strict: true,
+      });
+      branch = parsed.values.branch;
+    } catch {
+      throw new Error("Usage: wr sync [--branch <source>]");
+    }
+    const repo = new Repo(process.cwd());
+    repo.locked(() => sync(repo, branch));
   } else if (command === "open") {
     let name: string;
     try {

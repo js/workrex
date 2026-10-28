@@ -1,6 +1,6 @@
 ---
 name: workrex
-description: Use Workrex (wr) to create, open, reopen, list, merge, or remove Git worktrees in Rex tabs. Use when adjusting Workrex pane commands/layouts, copy/symlink rules, or main_branch in per-project .workrex.json or global workrex/config.json, and when troubleshooting Workrex setup or interrupted operations.
+description: Use Workrex (wr) to create, open, reopen, list, sync files, merge, or remove Git worktrees in Rex tabs. Use when adjusting Workrex pane commands/layouts, copy/symlink rules, or main_branch in per-project .workrex.json or global workrex/config.json, and when troubleshooting Workrex setup or interrupted operations.
 ---
 
 # Workrex
@@ -27,13 +27,19 @@ wr ls
 - Without `--pr`, new branches start at the **invoking checkout's HEAD**, not automatically at `main_branch`. `--branch` selects an existing local source branch without fetching or pulling.
 - `wr add --pr <number>` fetches a GitHub PR with `gh pr checkout --worktree`, naming the local branch and worktree `pr-<number>-<headRefName>` and applying the normal Workrex file rules and pane config. It requires authenticated `gh` with `--worktree` support and leaves the invoking checkout unchanged. Use `wr add <new-name> --pr <number>` for an exact name without the automatic prefix. Older unprefixed worktrees keep their names; reopen them with `wr open <old-name>` or pass the old name explicitly to `add --pr`. `--pr` and `--branch` are mutually exclusive. Registered names reopen without fetching or resetting; unregistered existing branches are refused rather than updated.
 - An existing local branch keeps its commits. Pass `--branch` only for a new branch and unregistered worktree; it cannot reset an existing branch or retarget a registered worktree.
-- Repeating `add` or `open` focuses an open tab or recreates a closed tab. Neither reapplies file rules, rebuilds an open layout, or restores a missing directory.
+- Repeating `add` or `open` focuses an open tab or recreates a closed tab. Neither reapplies file rules, rebuilds an open layout, or restores a missing directory. To reapply file rules, use the sync workflow below.
 - `wr open <name>` takes a registered name from `wr ls`, or the current branch name of an unregistered linked worktree, not a path. Use the registered name after switching branches inside a worktree. Opening keeps the registered name unchanged. `merge` still refuses a managed worktree whose branch changed; `rm` uses the current branch as described below. It uses merged global and primary-checkout project config without creating a worktree or applying file rules. Configured pane commands run in the worktree as usual.
 - Worktrees created outside `wr` are registered as `external`, or shown as `missing` if their directory is gone. `merge` refuses them. `rm` only closes their tab and forgets the entry, even with `--force`. Their files and branches remain. For failed or deferred tab closure, follow [recovery](references/setup-recovery.md).
 - Worktrees created with `add` are placed beside the primary checkout in `<repo>__worktrees/<encoded-branch>`. Read the reported path rather than constructing it. `/` in branch names is encoded as `%2F`.
 - Tabs default to `<repo>/<branch>` but are tracked by window ID, not title. Renaming a tab is safe.
 
 Verify the reported path and `wr ls` state. When layout or command startup matters, inspect the registered session/window through Rex and capture the relevant panes. An open tab alone does not prove its commands succeeded. Creating a tab may succeed even if automatic switching fails.
+
+## Sync files
+
+Read [file rules](references/configuration.md#file-rules) before syncing. `wr sync` overwrites copy targets, including local edits and entire directory contents, so inspect the configured targets and confirm that replacement is intended. Run it inside the target managed worktree or a subdirectory; it needs no Rex session.
+
+`wr sync` uses the checkout of the literal local branch `main`; `wr sync --branch <source>` selects another branch for that invocation. This is independent of `main_branch` config and the checkout used by `add`. The source must have exactly one available checkout. Existing links to the selected source path are silently preserved; conflicting symlink destinations are refused before copying, even with `--branch`. Verify the resulting links and non-secret copy contents. Report missing/ambiguous source errors rather than switching branches or creating checkouts automatically. No parent tracking or registry migration is needed.
 
 ## Adjust configuration
 
@@ -42,7 +48,7 @@ Read [configuration](references/configuration.md) before editing either scope. I
 1. Identify **project** versus **global** intent. Ask when unclear; a global edit affects other repositories. Find both files and read their existing values before choosing an edit.
 2. Change only the requested scope and fields. Project settings come from the primary checkout, even when invoked in a linked worktree. Preserve omitted fields so they continue inheriting.
 3. Validate the resulting effective config with the installed loader, plus branch and file-rule checks. Report any checks that could not run. `wr ls` does **not** validate config; creating a disposable worktree is not a read-only validation method.
-4. Report the changed file, effective behavior, and when it applies. JSON config is read on subsequent relevant commands; no Rex reload is needed. Pane changes apply to new/reopened tabs, file rules only to newly created worktrees. Preserve running tabs unless the user requested restarting them.
+4. Report the changed file, effective behavior, and when it applies. JSON config is read on subsequent relevant commands; no Rex reload is needed. Pane changes apply to new/reopened tabs; file rules apply to newly created worktrees or explicitly through `wr sync`. Preserve running tabs unless the user requested restarting them.
 
 ## Merge or remove
 

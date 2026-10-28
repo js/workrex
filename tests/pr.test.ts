@@ -88,7 +88,10 @@ test("--pr fetches the PR into a managed worktree and applies the merged Workrex
 test("--pr works from a linked checkout and uses primary-checkout config", () => {
   const linked = join(f.root, "linked");
   f.git(["worktree", "add", "-b", "linked", linked]);
-  f.local({ panes: [{ command: "primary-command" }] });
+  f.local({ panes: [{ command: "primary-command" }], files: { copy: [".env"], symlink: ["secret.txt"] } });
+  f.write(join(linked, ".env"), "linked env");
+  f.write(join(linked, "secret.txt"), "linked secret");
+  f.write(join(f.primary, ".env"), "not the parent");
   f.write(join(linked, ".workrex.json"), "invalid config");
   const result = wr(undefined, linked);
   expect(result.err).toBe("");
@@ -96,6 +99,12 @@ test("--pr works from a linked checkout and uses primary-checkout config", () =>
   expect(f.git(["branch", "--show-current"], linked)).toBe("linked");
   expect(f.git(["rev-parse", "HEAD"], f.path(localBranch()))).toBe(pr.head);
   expect(f.tabs()[0].panes).toEqual([{ command: "primary-command", focus: false }]);
+  const path = f.path(localBranch());
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("linked env");
+  expect(readlinkSync(join(path, "secret.txt"))).toBe(join(linked, "secret.txt"));
+  f.write(join(linked, ".env"), "updated linked env");
+  expect(f.wr(["sync", "--branch", "linked"], path).code).toBe(0);
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("updated linked env");
 });
 
 test("the default PR prefix avoids colliding with a fork's main branch", () => {
