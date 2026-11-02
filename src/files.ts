@@ -3,7 +3,7 @@ import {
   realpathSync, renameSync, rmSync, symlinkSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileRules, inside, present, type Config, type FileRule } from "./config";
+import { attemptFileRule, fileRules, inside, present, type Config, type FileRule, type FileRuleError } from "./config";
 import { git, Repo, worktrees } from "./repo";
 
 type FilePlan = { source: string; destination: string; rules: FileRule[] };
@@ -34,7 +34,7 @@ export function sourceCheckout(repo: Repo, branch?: string): string {
   return realpathSync(path);
 }
 
-export function planFiles(repo: Repo, source: string, destination: string, cfg: Config): FilePlan {
+export function planFiles(repo: Repo, source: string, destination: string, cfg: Config, onError?: FileRuleError): FilePlan {
   if (source === destination) {
     throw new Error("Cannot sync a worktree from itself");
   }
@@ -43,13 +43,12 @@ export function planFiles(repo: Repo, source: string, destination: string, cfg: 
   // sources escape the repository or point back into the destination.
   const roots = worktrees(repo.primary).filter((wt) => existsSync(wt.path)).map((wt) => realpathSync(wt.path))
     .filter((path) => path !== destination);
-  const rules = fileRules(source, cfg, roots);
-  for (const rule of rules) {
+  const rules = fileRules(source, cfg, roots, onError).filter((rule) => attemptFileRule(rule, onError, () => {
     const resolved = realpathSync(join(source, rule.path));
     if (inside(destination, resolved) || inside(resolved, destination)) {
       throw new Error(`File-rule source overlaps destination worktree: ${rule.path}`);
     }
-  }
+  }));
   return { source, destination, rules };
 }
 
@@ -84,48 +83,50 @@ function checkReplacement(path: string) {
   }
 }
 
-export function installFiles(plan: FilePlan, overwrite = false) {
-  const { source: root, destination, rules } = plan;
-
-  // Validate every destination before replacing anything.
-  for (const rule of rules) {
-    const path = join(destination, rule.path);
-    checkParents(destination, path);
-    if (!present(path)) continue;
-    if (!overwrite) {
-      throw new Error(`File-rule destination already exists: ${path}`);
+function checkDestination({ source: root, destination }: FilePlan, rule: FileRule, overwrite: boolean) {
+  const path = join(destination, rule.path);
+  checkParents(destination, path);
+  if (!present(path)) return;
+  if (!overwrite) {
+    throw new Error(`File-rule destination already exists: ${path}`);
+  }
+  if (rule.kind === "symlink") {
+    if (!sameLink(path, join(root, rule.path))) {
+      throw new Error(`Conflicting symlink destination: ${path}. Expected a link to ${join(root, rule.path)}`);
     }
-    if (rule.kind === "symlink") {
-      if (!sameLink(path, join(root, rule.path))) {
-        throw new Error(`Conflicting symlink destination: ${path}. Expected a link to ${join(root, rule.path)}`);
-      }
-    } else {
-      checkReplacement(path);
+  } else {
+    checkReplacement(path);
+  }
+}
+
+function installRule({ source: root, destination }: FilePlan, rule: FileRule, overwrite: boolean) {
+  const path = join(destination, rule.path);
+  const source = join(root, rule.path);
+  checkParents(destination, path);
+  mkdirSync(dirname(path), { recursive: true });
+  if (rule.kind === "symlink") {
+    if (overwrite && sameLink(path, source)) return;
+    symlinkSync(source, path);
+  } else if (!overwrite) {
+    cpSync(source, path, { recursive: true, force: false, errorOnExist: true, mode: constants.COPYFILE_EXCL });
+  } else {
+    // Stage before removing the old target, and replace rather than copying through
+    // destination symlinks/hardlinks. Directories are replaced, not merged.
+    const temporary = mkdtempSync(join(dirname(path), ".wr-copy-"));
+    try {
+      const staged = join(temporary, "source");
+      cpSync(source, staged, { recursive: true, force: false, errorOnExist: true, mode: constants.COPYFILE_EXCL });
+      rmSync(path, { recursive: true, force: true });
+      renameSync(staged, path);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
     }
   }
+}
 
-  for (const rule of rules) {
-    const path = join(destination, rule.path);
-    const source = join(root, rule.path);
-    checkParents(destination, path);
-    mkdirSync(dirname(path), { recursive: true });
-    if (rule.kind === "symlink") {
-      if (overwrite && sameLink(path, source)) continue;
-      symlinkSync(source, path);
-    } else if (!overwrite) {
-      cpSync(source, path, { recursive: true, force: false, errorOnExist: true, mode: constants.COPYFILE_EXCL });
-    } else {
-      // Stage before removing the old target, and replace rather than copying through
-      // destination symlinks/hardlinks. Directories are replaced, not merged.
-      const temporary = mkdtempSync(join(dirname(path), ".wr-copy-"));
-      try {
-        const staged = join(temporary, "source");
-        cpSync(source, staged, { recursive: true, force: false, errorOnExist: true, mode: constants.COPYFILE_EXCL });
-        rmSync(path, { recursive: true, force: true });
-        renameSync(staged, path);
-      } finally {
-        rmSync(temporary, { recursive: true, force: true });
-      }
-    }
+export function installFiles(plan: FilePlan, overwrite = false, onError?: FileRuleError) {
+  const ready = plan.rules.filter((rule) => attemptFileRule(rule, onError, () => checkDestination(plan, rule, overwrite)));
+  for (const rule of ready) {
+    attemptFileRule(rule, onError, () => installRule(plan, rule, overwrite));
   }
 }

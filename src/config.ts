@@ -167,16 +167,35 @@ export function present(path: string): boolean {
 
 export type FileRule = { kind: "copy" | "symlink"; path: string };
 
-export function fileRules(root: string, cfg: Config, symlinkRoots: string[] = [root]): FileRule[] {
-  const rules: FileRule[] = [
+export type FileRuleError = (rule: FileRule, error: unknown) => void;
+
+export function attemptFileRule(rule: FileRule, onError: FileRuleError | undefined, run: () => boolean | void): boolean {
+  try {
+    return run() !== false;
+  } catch (error) {
+    if (!onError) throw error;
+    onError(rule, error);
+    return false;
+  }
+}
+
+export function fileRules(
+  root: string,
+  cfg: Config,
+  symlinkRoots: string[] = [root],
+  onError?: FileRuleError,
+): FileRule[] {
+  const all: FileRule[] = [
     ...cfg.files.copy.map((path): FileRule => ({ kind: "copy", path })),
     ...cfg.files.symlink.map((path): FileRule => ({ kind: "symlink", path })),
-  ].filter((rule) => {
-    const parts = rule.path.split("/");
-    if (isAbsolute(rule.path) || parts.some((p) => !p || p === "." || p === ".." || p === ".git")) {
-      throw new Error(`Unsafe file rule: ${rule.path}`);
+  ];
+  for (const { path } of all) {
+    if (isAbsolute(path) || path.split("/").some((p) => !p || p === "." || p === ".." || p === ".git")) {
+      throw new Error(`Unsafe file rule: ${path}`);
     }
+  }
 
+  const rules = all.filter((rule) => attemptFileRule(rule, onError, () => {
     const source = join(root, rule.path);
     if (!present(source)) {
       return false;
@@ -189,8 +208,7 @@ export function fileRules(root: string, cfg: Config, symlinkRoots: string[] = [r
     if (rule.kind === "copy") {
       checkCopy(source);
     }
-    return true;
-  });
+  }));
 
   for (let i = 0; i < rules.length; i++) {
     for (let j = i + 1; j < rules.length; j++) {

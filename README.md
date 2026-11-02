@@ -204,7 +204,7 @@ For initial file setup, `wr add` uses the invoking checkout, including with `--p
 
 Copies remain independent after creation. Symlinks point to the parent's path, so changes through a linked `node_modules` affect the parent too. A parent's symlink may itself point into another checkout of the same repository, preserving sharing through nested worktrees.
 
-`wr add` skips rules whose sources are missing, and rejects existing destinations and overlapping rules. Paths cannot be absolute or contain empty, `.`, `..`, or `.git` components. Copy sources must resolve inside the source checkout and cannot contain symlinks or Git metadata. Symlink sources must resolve inside this repository's checkouts, outside the destination worktree and Git metadata. Use a symlink rule for directories containing symlinks.
+`wr add` skips rules whose sources are missing, and rejects existing destinations and overlapping rules. It validates every rule before installing any file and stops at the first error. Paths cannot be absolute or contain empty, `.`, `..`, or `.git` components. Copy sources must resolve inside the source checkout and cannot contain symlinks or Git metadata. Symlink sources must resolve inside this repository's checkouts, outside the destination worktree and Git metadata. Use a symlink rule for directories containing symlinks.
 
 #### Reapply file rules
 
@@ -217,9 +217,11 @@ wr sync --branch develop      # Use develop's checkout for this invocation
 `wr sync` runs in the current linked Git worktree (or any subdirectory), whether or not `wr` created or registered it, using the current merged global/project config. It defaults to the literal local branch `main`, regardless of `main_branch` config or which checkout created the worktree. `--branch <source>` overrides the source for one invocation. The selected branch must have exactly one available checkout; `sync` never switches, creates, or fetches a branch. It needs no Rex session and does not open tabs.
 
 - Copies **overwrite existing targets**, including tracked files and local edits. Directory targets are replaced entirely, not merged; destination-only files are removed. Destination symlinks are replaced rather than followed.
-- Symlinks already pointing to the selected source path are silently left alone, including equivalent relative links. Other existing symlinks, files, or directories at a symlink destination cause an error before any copies are changed. Changing `--branch` does not automatically replace links to a different source.
+- Symlinks already pointing to the selected source path are silently left alone, including equivalent relative links. Any other existing symlink, file, or directory at a symlink destination, such as a real `node_modules` directory, is reported and left untouched. Changing `--branch` does not automatically replace links to a different source.
+- When a copy or symlink rule fails, `wr sync` prints `<kind> <path>: <reason>` on stderr and continues with the remaining rules. This includes source checks, destination checks, and errors while copying or linking. If any rule fails, the command exits with code 1 and prints no `synced` line. A failed run can still change files. Inspect the reported failures before retrying.
+- Invalid configuration, unsafe rule paths, overlapping rules, and the worktree and source checks below still stop `wr sync` before any file changes.
 - Missing sources are skipped, leaving any existing targets unchanged. Removing a rule from config does not remove its old target.
-- Symlinked destination ancestors and copy targets containing Git metadata are refused.
+- A rule fails, and is skipped, when a destination ancestor is a symlink or a copy target contains Git metadata.
 - Primary, locked, and unfinished worktrees are refused, as is syncing a checkout from itself. Registration with `wr open` is unnecessary and `sync` never creates or changes registry entries. Existing managed worktrees are supported without migration or new registry metadata.
 
 Ignore rule destinations in Git, especially `.env`, to avoid accidental commits and untracked changes.

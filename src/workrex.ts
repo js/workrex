@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
-import { config, present } from "./config";
+import { config, present, type FileRuleError } from "./config";
 import { installFiles, planFiles, sourceCheckout } from "./files";
 import { git, Repo, validateBranch, worktreePath, worktrees, type Entry } from "./repo";
 import { inspectTab, openTab } from "./rex";
@@ -144,8 +144,16 @@ export function sync(repo: Repo, branch = "main") {
     path,
     gitDir: realpathSync(git(path, ["rev-parse", "--absolute-git-dir"]).out.trim()),
   });
-  const files = planFiles(repo, sourceCheckout(repo, branch), path, config(repo.primary));
-  installFiles(files, true);
+  let failed = 0;
+  const onError: FileRuleError = (rule, error) => {
+    failed++;
+    console.error(`${rule.kind} ${rule.path}: ${error instanceof Error ? error.message : String(error)}`);
+  };
+  const files = planFiles(repo, sourceCheckout(repo, branch), path, config(repo.primary), onError);
+  installFiles(files, true, onError);
+  if (failed) {
+    throw new Error(`${failed} file ${failed === 1 ? "rule" : "rules"} failed`);
+  }
   console.log(`${entry?.branch ?? wt.branch ?? "(detached)"}\t${path}\tsynced`);
 }
 

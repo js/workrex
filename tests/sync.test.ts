@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fixture } from "./helpers";
 
@@ -161,25 +161,141 @@ test("sync accepts relative symlinks to the same parent path without replacing t
   expect(readlinkSync(join(child, "secret.txt"))).toBe(target);
 });
 
-test.each(["wrong-link", "dangling-link", "file", "directory"])("sync rejects a conflicting symlink target before overwriting copies: %s", (kind) => {
+function failedSync(path: string, ...errors: string[]) {
+  const result = f.wr(["sync"], path);
+  expect(result.code).toBe(1);
+  expect(result.out).not.toContain("synced");
+  for (const error of errors) expect(result.err).toContain(error);
+  return result;
+}
+
+test.each(["wrong-link", "dangling-link", "file", "directory"])("sync reports a conflicting symlink target and still applies the other rules: %s", (kind) => {
   const child = add("child");
-  f.local({ files: { copy: [".env"], symlink: ["secret.txt"] } });
+  f.local({ files: { copy: [".env"], symlink: ["secret.txt", "other.txt"] } });
   f.write(join(f.primary, ".env"), "new");
   f.write(join(f.primary, "secret.txt"), "shared");
-  f.write(join(child, ".env"), "unchanged");
+  f.write(join(f.primary, "other.txt"), "other");
+  f.write(join(child, ".env"), "overwritten");
   const target = join(child, "secret.txt");
+  const wrong = join(f.root, "wrong");
   if (kind === "file") f.write(target, "conflict");
-  else if (kind === "directory") mkdirSync(target);
+  else if (kind === "directory") f.write(join(target, "keep.txt"), "keep");
   else {
-    const wrong = join(f.root, "wrong");
     if (kind === "wrong-link") f.write(wrong, "do not modify");
     symlinkSync(wrong, target);
   }
-  const result = f.wr(["sync"], child);
-  expect(result.code).toBe(1);
-  expect(result.err).toContain("Conflicting symlink destination");
-  expect(readFileSync(join(child, ".env"), "utf8")).toBe("unchanged");
-  expect(lstatSync(target)).toBeDefined();
+  const result = failedSync(child, "symlink secret.txt", "Conflicting symlink destination", "1 file rule failed");
+  expect(result.err.match(/Conflicting symlink destination/g)).toHaveLength(1);
+  expect(readFileSync(join(child, ".env"), "utf8")).toBe("new");
+  expect(readlinkSync(join(child, "other.txt"))).toBe(join(f.primary, "other.txt"));
+  if (kind === "file") expect(readFileSync(target, "utf8")).toBe("conflict");
+  else if (kind === "directory") expect(readFileSync(join(target, "keep.txt"), "utf8")).toBe("keep");
+  else {
+    expect(readlinkSync(target)).toBe(wrong);
+    if (kind === "wrong-link") expect(readFileSync(wrong, "utf8")).toBe("do not modify");
+  }
+});
+
+test("sync reports every failed rule in one run, applies later rules, and succeeds on retry", () => {
+  const child = add("child");
+  f.local({
+    files: {
+      copy: ["blocked", "bad-source", "first.txt", "second.txt"],
+      symlink: ["node_modules", "dep.txt", "last.txt"],
+    },
+  });
+  f.write(join(f.primary, "blocked/file"), "new");
+  f.write(join(child, "blocked/.git"), "protected");
+  f.write(join(f.primary, "bad-source/file"), "x");
+  symlinkSync(join(f.primary, "tracked.txt"), join(f.primary, "bad-source/link"));
+  f.write(join(f.primary, "first.txt"), "first");
+  f.write(join(f.primary, "second.txt"), "second");
+  f.write(join(child, "first.txt"), "overwrite me");
+  f.write(join(f.primary, "node_modules/pkg/index.js"), "shared");
+  f.write(join(child, "node_modules/local/index.js"), "local install");
+  f.write(join(f.primary, "dep.txt"), "dep");
+  f.write(join(f.primary, "last.txt"), "last");
+
+  failedSync(child, "copy blocked", "Cannot overwrite Git metadata", "copy bad-source", "contains a symlink",
+    "symlink node_modules", "Conflicting symlink destination", "3 file rules failed");
+  expect(readFileSync(join(child, "blocked/.git"), "utf8")).toBe("protected");
+  expect(existsSync(join(child, "blocked/file"))).toBe(false);
+  expect(existsSync(join(child, "bad-source"))).toBe(false);
+  expect(readFileSync(join(child, "first.txt"), "utf8")).toBe("first");
+  expect(readFileSync(join(child, "second.txt"), "utf8")).toBe("second");
+  expect(lstatSync(join(child, "node_modules")).isDirectory()).toBe(true);
+  expect(readFileSync(join(child, "node_modules/local/index.js"), "utf8")).toBe("local install");
+  expect(readlinkSync(join(child, "dep.txt"))).toBe(join(f.primary, "dep.txt"));
+  expect(readlinkSync(join(child, "last.txt"))).toBe(join(f.primary, "last.txt"));
+
+  rmSync(join(child, "blocked"), { recursive: true });
+  rmSync(join(child, "node_modules"), { recursive: true });
+  rmSync(join(f.primary, "bad-source"), { recursive: true });
+  const result = sync(child);
+  expect(result.out).toBe(`child\t${child}\tsynced\n`);
+  expect(readFileSync(join(child, "blocked/file"), "utf8")).toBe("new");
+  expect(readlinkSync(join(child, "node_modules"))).toBe(join(f.primary, "node_modules"));
+});
+
+test.skipIf(process.getuid?.() === 0)("sync reports a copy that cannot be installed and continues", () => {
+  const child = add("child");
+  f.local({ files: { copy: ["denied/.env", "next.txt"], symlink: ["link.txt"] } });
+  f.write(join(f.primary, "denied/.env"), "new");
+  f.write(join(f.primary, "next.txt"), "next");
+  f.write(join(f.primary, "link.txt"), "shared");
+  f.write(join(child, "denied/.env"), "old");
+  chmodSync(join(child, "denied"), 0o555);
+  try {
+    failedSync(child, "copy denied/.env", "1 file rule failed");
+    expect(readFileSync(join(child, "denied/.env"), "utf8")).toBe("old");
+    expect(readdirSync(join(child, "denied"))).toEqual([".env"]);
+    expect(readFileSync(join(child, "next.txt"), "utf8")).toBe("next");
+    expect(readlinkSync(join(child, "link.txt"))).toBe(join(f.primary, "link.txt"));
+  } finally {
+    chmodSync(join(child, "denied"), 0o755);
+  }
+  expect(sync(child).out).toBe(`child\t${child}\tsynced\n`);
+  expect(readFileSync(join(child, "denied/.env"), "utf8")).toBe("new");
+});
+
+test.skipIf(process.getuid?.() === 0)("sync continues when copy and symlink sources cannot be inspected", () => {
+  const child = add("child");
+  f.local({ files: { copy: ["denied/copy", "next.txt"], symlink: ["denied/link", "last.txt"] } });
+  f.write(join(f.primary, "denied/copy"), "copy source");
+  f.write(join(f.primary, "denied/link"), "link source");
+  f.write(join(f.primary, "next.txt"), "next");
+  f.write(join(f.primary, "last.txt"), "last");
+  f.write(join(child, "denied/copy"), "keep copy");
+  f.write(join(child, "denied/link"), "keep link target");
+  chmodSync(join(f.primary, "denied"), 0o000);
+  try {
+    failedSync(child, "copy denied/copy", "symlink denied/link", "2 file rules failed");
+    expect(readFileSync(join(child, "denied/copy"), "utf8")).toBe("keep copy");
+    expect(readFileSync(join(child, "denied/link"), "utf8")).toBe("keep link target");
+    expect(readFileSync(join(child, "next.txt"), "utf8")).toBe("next");
+    expect(readlinkSync(join(child, "last.txt"))).toBe(join(f.primary, "last.txt"));
+  } finally {
+    chmodSync(join(f.primary, "denied"), 0o755);
+  }
+});
+
+test("sync still stops before installing anything for invalid configuration or overlapping rules", () => {
+  const child = add("child");
+  f.write(join(f.primary, "ok.txt"), "new");
+  f.write(join(f.primary, "ignored/file"), "source");
+  f.write(join(child, "ok.txt"), "unchanged");
+  for (const [files, message] of [
+    [{ copy: ["ok.txt", "../outside"] }, "Unsafe file rule"],
+    [{ copy: ["ok.txt", "ignored", "ignored/file"] }, "Overlapping file rules"],
+    [{ copy: ["ok.txt"], symlink: "ok.txt" }, "files.symlink must be an array"],
+  ] as const) {
+    f.local({ files });
+    const result = f.wr(["sync"], child);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain(message);
+    expect(result.err).not.toContain("file rule failed");
+    expect(readFileSync(join(child, "ok.txt"), "utf8")).toBe("unchanged");
+  }
 });
 
 test.each(["symlink", "dangling", "hardlink", "nested-symlink"])("copy replacement never writes through destination links: %s", (kind) => {
@@ -211,13 +327,13 @@ test("sync refuses symlinked destination ancestors and embedded Git metadata", (
   f.local({ files: { copy: ["ignored/file"] } });
   f.write(join(f.primary, "ignored/file"), "new");
   symlinkSync(outside, join(child, "ignored"));
-  expect(f.wr(["sync"], child).err).toContain("not a real directory");
+  expect(failedSync(child, "copy ignored/file").err).toContain("not a real directory");
   expect(readFileSync(join(outside, "file"), "utf8")).toBe("untouched");
 
   rmSync(join(child, "ignored"));
   f.write(join(child, "ignored/.git"), "protected");
   f.local({ files: { copy: ["ignored"] } });
-  expect(f.wr(["sync"], child).err).toContain("Cannot overwrite Git metadata");
+  failedSync(child, "Cannot overwrite Git metadata");
   expect(readFileSync(join(child, "ignored/.git"), "utf8")).toBe("protected");
 });
 
@@ -278,7 +394,7 @@ test("sync refuses missing branches/checkouts, ambiguous sources, and itself", (
   expect(readFileSync(join(child, ".env"), "utf8")).toBe("keep");
 });
 
-test("sync --branch refuses links to another source without changing copies", () => {
+test("sync --branch reports links to another source and still updates other rules", () => {
   const child = add("child");
   const source = add("source");
   f.local({ files: { copy: [".env"], symlink: ["secret.txt"] } });
@@ -287,8 +403,11 @@ test("sync --branch refuses links to another source without changing copies", ()
     f.write(join(path, "secret.txt"), "shared");
   }
   sync(child);
-  expect(f.wr(["sync", "--branch", "source"], child).err).toContain("Conflicting symlink destination");
-  expect(readFileSync(join(child, ".env"), "utf8")).toBe(f.primary);
+  const result = f.wr(["sync", "--branch", "source"], child);
+  expect(result.code).toBe(1);
+  expect(result.out).not.toContain("synced");
+  expect(result.err).toContain("Conflicting symlink destination");
+  expect(readFileSync(join(child, ".env"), "utf8")).toBe(source);
   expect(readlinkSync(join(child, "secret.txt"))).toBe(join(f.primary, "secret.txt"));
 });
 

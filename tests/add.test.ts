@@ -153,6 +153,23 @@ test("file collisions preserve tracked content and the failed registration", () 
   expect(f.wr(["add", "collision"]).err).toContain("unfinished");
 });
 
+test("add still validates every rule before installing any file", () => {
+  f.local({ files: { copy: [".env", "bad"] } });
+  f.write(join(f.primary, ".env"), "secret");
+  f.write(join(f.primary, "bad/file"), "x");
+  symlinkSync(join(f.primary, ".env"), join(f.primary, "bad/link"));
+  const failed = f.wr(["add", "invalid-source"]);
+  expect(failed.code).toBe(1);
+  expect(failed.err).toContain("Copy source contains a symlink");
+  expect(existsSync(f.path("invalid-source"))).toBe(false);
+
+  f.local({ files: { copy: [".env", "tracked.txt"] } });
+  const collision = f.wr(["add", "collision"]);
+  expect(collision.code).toBe(1);
+  expect(collision.err).toContain("destination already exists");
+  expect(existsSync(join(f.path("collision"), ".env"))).toBe(false);
+});
+
 test("file rules refuse traversal, symlink escapes, and overlap", () => {
   f.local({ files: { copy: ["../outside"] } });
   expect(f.wr(["add", "escape"]).err).toContain("Unsafe file rule");
