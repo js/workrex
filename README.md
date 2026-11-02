@@ -214,13 +214,13 @@ wr sync                       # Copy/link from the checkout of main
 wr sync --branch develop      # Use develop's checkout for this invocation
 ```
 
-`wr sync` runs in the current managed worktree (or any subdirectory), using the current merged global/project config. It defaults to the literal local branch `main`, regardless of `main_branch` config or which checkout created the worktree. `--branch <source>` overrides the source for one invocation. The selected branch must have exactly one available checkout; `sync` never switches, creates, or fetches a branch. It needs no Rex session and does not open tabs.
+`wr sync` runs in the current linked Git worktree (or any subdirectory), whether or not `wr` created or registered it, using the current merged global/project config. It defaults to the literal local branch `main`, regardless of `main_branch` config or which checkout created the worktree. `--branch <source>` overrides the source for one invocation. The selected branch must have exactly one available checkout; `sync` never switches, creates, or fetches a branch. It needs no Rex session and does not open tabs.
 
 - Copies **overwrite existing targets**, including tracked files and local edits. Directory targets are replaced entirely, not merged; destination-only files are removed. Destination symlinks are replaced rather than followed.
 - Symlinks already pointing to the selected source path are silently left alone, including equivalent relative links. Other existing symlinks, files, or directories at a symlink destination cause an error before any copies are changed. Changing `--branch` does not automatically replace links to a different source.
 - Missing sources are skipped, leaving any existing targets unchanged. Removing a rule from config does not remove its old target.
 - Symlinked destination ancestors and copy targets containing Git metadata are refused.
-- Primary, external, and unfinished worktrees are refused, as is syncing a checkout from itself. Existing managed worktrees are supported without migration or new registry metadata.
+- Primary, locked, and unfinished worktrees are refused, as is syncing a checkout from itself. Registration with `wr open` is unnecessary and `sync` never creates or changes registry entries. Existing managed worktrees are supported without migration or new registry metadata.
 
 Ignore rule destinations in Git, especially `.env`, to avoid accidental commits and untracked changes.
 

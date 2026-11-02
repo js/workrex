@@ -37,7 +37,7 @@ Verify the reported path and `wr ls` state. When layout or command startup matte
 
 ## Sync files
 
-Read [file rules](references/configuration.md#file-rules) before syncing. `wr sync` overwrites copy targets, including local edits and entire directory contents, so inspect the configured targets and confirm that replacement is intended. Run it inside the target managed worktree or a subdirectory; it needs no Rex session.
+Read [file rules](references/configuration.md#file-rules) before syncing. `wr sync` overwrites copy targets, including local edits and entire directory contents, so inspect the configured targets and confirm that replacement is intended. Run it inside the target linked Git worktree or a subdirectory. The worktree need not be created or registered by `wr`. It needs no Rex session.
 
 `wr sync` uses the checkout of the literal local branch `main`; `wr sync --branch <source>` selects another branch for that invocation. This is independent of `main_branch` config and the checkout used by `add`. The source must have exactly one available checkout. Existing links to the selected source path are silently preserved; conflicting symlink destinations are refused before copying, even with `--branch`. Verify the resulting links and non-secret copy contents. Report missing/ambiguous source errors rather than switching branches or creating checkouts automatically. No parent tracking or registry migration is needed.
 

@@ -295,6 +295,7 @@ test("sync --branch refuses links to another source without changing copies", ()
 test("unrelated missing worktrees do not block file setup or sync", () => {
   const missing = join(f.root, "missing");
   f.git(["worktree", "add", "-b", "missing", missing]);
+  expect(f.wr(["open", "missing"]).code).toBe(0);
   rmSync(missing, { recursive: true });
   symlinkSync(join(f.root, "absent"), missing);
   f.local({ files: { copy: [".env"] } });
@@ -304,22 +305,116 @@ test("unrelated missing worktrees do not block file setup or sync", () => {
   expect(readFileSync(join(child, ".env"), "utf8")).toBe("source");
 });
 
-test("sync supports old registrations but refuses external, primary, and unfinished worktrees", () => {
-  expect(f.wr(["sync"]).err).toContain("inside a worktree created with wr add");
-  const external = join(f.root, "external");
-  f.git(["worktree", "add", "-b", "external", external]);
-  expect(f.wr(["sync"], external).code).toBe(1);
+function external(name: string, extra: string[] = ["-b", name]) {
+  const path = join(f.root, name);
+  f.git(["worktree", "add", ...extra, path]);
+  return path;
+}
+
+const state = () => join(f.primary, ".git/workrex/state.json");
+
+test("sync works in an unregistered linked worktree without Rex or state", () => {
+  f.local({ files: { copy: [".env"], symlink: ["secret.txt"] } });
+  f.write(join(f.primary, ".env"), "from main");
+  f.write(join(f.primary, "secret.txt"), "shared");
+  const path = external("external");
+  f.write(join(path, ".env"), "overwrite me");
+  const tabs = existsSync(f.env.WR_FAKE_STORE);
+
+  expect(sync(path).out).toBe(`external\t${path}\tsynced\n`);
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("from main");
+  expect(readlinkSync(join(path, "secret.txt"))).toBe(join(f.primary, "secret.txt"));
+  expect(existsSync(state())).toBe(false);
+  expect(existsSync(f.env.WR_FAKE_STORE)).toBe(tabs);
+
+  const sub = join(path, "nested");
+  mkdirSync(sub);
+  f.write(join(f.primary, ".env"), "again");
+  expect(sync(sub).out).toBe(`external\t${path}\tsynced\n`);
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("again");
+});
+
+test("sync --branch and detached HEAD work in an unregistered linked worktree", () => {
+  const source = external("source");
+  const detached = external("detached", ["--detach"]);
+  f.local({ files: { copy: [".env"] } });
+  f.write(join(f.primary, ".env"), "main");
+  f.write(join(source, ".env"), "source");
+  expect(sync(detached, "source").out).toBe(`(detached)\t${detached}\tsynced\n`);
+  expect(readFileSync(join(detached, ".env"), "utf8")).toBe("source");
+  expect(existsSync(state())).toBe(false);
+});
+
+test("sync in a registered external worktree keeps its registration and tab state", () => {
+  f.local({ files: { copy: [".env"] } });
+  f.write(join(f.primary, ".env"), "from main");
+  const path = external("external");
   expect(f.wr(["open", "external"]).code).toBe(0);
-  expect(f.wr(["sync"], external).code).toBe(1);
+  const registered = f.state();
+  const tabs = readFileSync(f.env.WR_FAKE_STORE);
+
+  expect(sync(path).out).toBe(`external\t${path}\tsynced\n`);
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("from main");
+  expect(f.state()).toEqual(registered);
+  expect(f.state().entries[0].phase).toBe("external");
+  expect(readFileSync(f.env.WR_FAKE_STORE)).toEqual(tabs);
+});
+
+test("sync refuses primary, locked, unfinished, and stale-identity worktrees without changing copies", () => {
+  f.local({ files: { copy: [".env"] } });
+  f.write(join(f.primary, ".env"), "main");
+  expect(f.wr(["sync"]).err).toContain("protected or locked");
+  expect(f.wr(["sync"], f.root).err).toContain("not a git repository");
+
+  const path = external("external");
+  f.write(join(path, ".env"), "keep");
+  const refused = (message: string) => {
+    expect(f.wr(["sync"], path).err).toContain(message);
+    expect(readFileSync(join(path, ".env"), "utf8")).toBe("keep");
+  };
+  f.git(["worktree", "lock", path]);
+  refused("protected or locked");
+  f.git(["worktree", "unlock", path]);
+  expect(f.wr(["open", "external"]).code).toBe(0);
+  f.git(["worktree", "lock", path]);
+  refused("protected or locked");
+  f.git(["worktree", "unlock", path]);
+
+  for (const phase of ["creating", "removing"]) {
+    rewriteState((state) => { state.entries[0].phase = phase; });
+    refused(`unfinished ${phase}`);
+  }
+  rewriteState((state) => { state.entries[0].phase = "external"; state.entries[0].gitDir = join(f.root, "elsewhere"); });
+  refused("ownership changed");
+  rewriteState((state) => { state.entries[0].gitDir = f.git(["rev-parse", "--absolute-git-dir"], path); });
+  expect(f.wr(["sync", "--branch", "external"], path).err).toContain("from itself");
+  expect(readFileSync(join(path, ".env"), "utf8")).toBe("keep");
+});
+
+test("sync checks unfinished registrations through path aliases", () => {
+  const child = add("child");
+  const alias = join(f.root, "alias");
+  symlinkSync(child, alias);
+  f.local({ files: { copy: [".env"] } });
+  f.write(join(f.primary, ".env"), "source");
+  f.write(join(child, ".env"), "keep");
+  for (const phase of ["creating", "removing"]) {
+    rewriteState((state) => { state.entries[0].path = alias; state.entries[0].phase = phase; });
+    expect(f.wr(["sync"], child).err).toContain(`unfinished ${phase}`);
+    expect(readFileSync(join(child, ".env"), "utf8")).toBe("keep");
+  }
+});
+
+test("sync supports old registrations and refuses unfinished managed worktrees", () => {
   const child = add("child");
   expect(f.state().version).toBe(1);
-  expect(f.state().entries[1]).not.toHaveProperty("parent");
+  expect(f.state().entries[0]).not.toHaveProperty("parent");
   f.local({ files: { copy: [".env"] } });
   f.write(join(f.primary, ".env"), "works without parent metadata");
   sync(child);
   expect(readFileSync(join(child, ".env"), "utf8")).toBe("works without parent metadata");
   for (const phase of ["creating", "removing"]) {
-    rewriteState((state) => { state.entries[1].phase = phase; });
+    rewriteState((state) => { state.entries[0].phase = phase; });
     expect(f.wr(["sync"], child).err).toContain(`unfinished ${phase}`);
   }
 });

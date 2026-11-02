@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
 import { config, present } from "./config";
 import { installFiles, planFiles, sourceCheckout } from "./files";
@@ -136,17 +136,17 @@ export function add(repo: Repo, name: string | undefined, options: { branch?: st
 
 export function sync(repo: Repo, branch = "main") {
   const path = realpathSync(git(repo.cwd, ["rev-parse", "--show-toplevel"]).out.trim());
-  const entry = repo.entries.find((item) => item.path === path);
-  if (!entry || entry.phase === "external") {
-    throw new Error("Run wr sync inside a worktree created with wr add");
-  }
-  if (entry.phase !== "ready") {
+  const entry = repo.entries.find((item) => item.path === path || (existsSync(item.path) && realpathSync(item.path) === path));
+  if (entry && entry.phase !== "ready" && entry.phase !== "external") {
     throw new Error(`${entry.branch} has unfinished ${entry.phase} work; cannot sync files`);
   }
-  repo.verifyWorktree(entry);
-  const files = planFiles(repo, sourceCheckout(repo, branch), entry.path, config(repo.primary));
+  const wt = repo.verifyWorktree(entry ?? {
+    path,
+    gitDir: realpathSync(git(path, ["rev-parse", "--absolute-git-dir"]).out.trim()),
+  });
+  const files = planFiles(repo, sourceCheckout(repo, branch), path, config(repo.primary));
   installFiles(files, true);
-  console.log(`${entry.branch}\t${entry.path}\tsynced`);
+  console.log(`${entry?.branch ?? wt.branch ?? "(detached)"}\t${path}\tsynced`);
 }
 
 export function open(repo: Repo, name: string) {
