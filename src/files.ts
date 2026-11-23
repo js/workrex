@@ -91,6 +91,11 @@ function checkDestination({ source: root, destination }: FilePlan, rule: FileRul
     throw new Error(`File-rule destination already exists: ${path}`);
   }
   if (rule.kind === "symlink") {
+    const stat = lstatSync(path);
+    if (!stat.isSymbolicLink()) {
+      console.log(`symlink ${rule.path}: skipped, already exists as a ${stat.isDirectory() ? "directory" : "file"}`);
+      return false;
+    }
     if (!sameLink(path, join(root, rule.path))) {
       throw new Error(`Conflicting symlink destination: ${path}. Expected a link to ${join(root, rule.path)}`);
     }

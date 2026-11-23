@@ -169,7 +169,26 @@ function failedSync(path: string, ...errors: string[]) {
   return result;
 }
 
-test.each(["wrong-link", "dangling-link", "file", "directory"])("sync reports a conflicting symlink target and still applies the other rules: %s", (kind) => {
+test.each(["file", "directory"])("sync skips an existing %s at a symlink target and still applies the other rules", (kind) => {
+  const child = add("child");
+  f.local({ files: { copy: [".env"], symlink: ["secret.txt", "other.txt"] } });
+  f.write(join(f.primary, ".env"), "new");
+  f.write(join(f.primary, "secret.txt"), "shared");
+  f.write(join(f.primary, "other.txt"), "other");
+  f.write(join(child, ".env"), "overwritten");
+  const target = join(child, "secret.txt");
+  if (kind === "file") f.write(target, "conflict");
+  else f.write(join(target, "keep.txt"), "keep");
+  const result = sync(child);
+  expect(result.out).toContain(`symlink secret.txt: skipped, already exists as a ${kind}`);
+  expect(result.out).toContain("synced");
+  expect(readFileSync(join(child, ".env"), "utf8")).toBe("new");
+  expect(readlinkSync(join(child, "other.txt"))).toBe(join(f.primary, "other.txt"));
+  if (kind === "file") expect(readFileSync(target, "utf8")).toBe("conflict");
+  else expect(readFileSync(join(target, "keep.txt"), "utf8")).toBe("keep");
+});
+
+test.each(["wrong-link", "dangling-link"])("sync reports a conflicting symlink target and still applies the other rules: %s", (kind) => {
   const child = add("child");
   f.local({ files: { copy: [".env"], symlink: ["secret.txt", "other.txt"] } });
   f.write(join(f.primary, ".env"), "new");
@@ -178,22 +197,14 @@ test.each(["wrong-link", "dangling-link", "file", "directory"])("sync reports a 
   f.write(join(child, ".env"), "overwritten");
   const target = join(child, "secret.txt");
   const wrong = join(f.root, "wrong");
-  if (kind === "file") f.write(target, "conflict");
-  else if (kind === "directory") f.write(join(target, "keep.txt"), "keep");
-  else {
-    if (kind === "wrong-link") f.write(wrong, "do not modify");
-    symlinkSync(wrong, target);
-  }
+  if (kind === "wrong-link") f.write(wrong, "do not modify");
+  symlinkSync(wrong, target);
   const result = failedSync(child, "symlink secret.txt", "Conflicting symlink destination", "1 file rule failed");
   expect(result.err.match(/Conflicting symlink destination/g)).toHaveLength(1);
   expect(readFileSync(join(child, ".env"), "utf8")).toBe("new");
   expect(readlinkSync(join(child, "other.txt"))).toBe(join(f.primary, "other.txt"));
-  if (kind === "file") expect(readFileSync(target, "utf8")).toBe("conflict");
-  else if (kind === "directory") expect(readFileSync(join(target, "keep.txt"), "utf8")).toBe("keep");
-  else {
-    expect(readlinkSync(target)).toBe(wrong);
-    if (kind === "wrong-link") expect(readFileSync(wrong, "utf8")).toBe("do not modify");
-  }
+  expect(readlinkSync(target)).toBe(wrong);
+  if (kind === "wrong-link") expect(readFileSync(wrong, "utf8")).toBe("do not modify");
 });
 
 test("sync reports every failed rule in one run, applies later rules, and succeeds on retry", () => {
@@ -216,8 +227,9 @@ test("sync reports every failed rule in one run, applies later rules, and succee
   f.write(join(f.primary, "dep.txt"), "dep");
   f.write(join(f.primary, "last.txt"), "last");
 
-  failedSync(child, "copy blocked", "Cannot overwrite Git metadata", "copy bad-source", "contains a symlink",
-    "symlink node_modules", "Conflicting symlink destination", "3 file rules failed");
+  const failed = failedSync(child, "copy blocked", "Cannot overwrite Git metadata", "copy bad-source", "contains a symlink",
+    "2 file rules failed");
+  expect(failed.out).toContain("symlink node_modules: skipped, already exists as a directory");
   expect(readFileSync(join(child, "blocked/.git"), "utf8")).toBe("protected");
   expect(existsSync(join(child, "blocked/file"))).toBe(false);
   expect(existsSync(join(child, "bad-source"))).toBe(false);
